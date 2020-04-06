@@ -2,9 +2,6 @@
 // Created by 孙卓文 on 2020/4/6.
 //
 
-//
-// Created by 孙卓文 on 2020/4/5.
-//
 #include <iostream>
 #include <cstdio>
 #include <unistd.h>
