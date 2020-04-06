@@ -23,28 +23,49 @@ int main_fun2() {
     } else {
         printf("绑定网络端口成功...\n");
     }
+
     //3 listen 监听网络端口
     if (listen(sock, 5) == SOCKET_ERROR){
         printf("监听网络端口失败...\n");
     } else {
         printf("监听网络端口成功...\n");
     }
+
     //4 accept 等待接受客户连接
     sockaddr_in clientAddr = {};
     socklen_t nAddrLen = sizeof(sockaddr_in);
     SOCKET clientSock = INVALID_SOCKET;
-    char msyBuf[] = "hello";
+    clientSock = accept(sock, (sockaddr *) &clientAddr, &nAddrLen);
+    if (clientSock == INVALID_SOCKET) {
+        printf("接受客户连接失败...\n");
+    } else {
+        printf("新客户连接成功: IP = %s\n", inet_ntoa(clientAddr.sin_addr));
+    }
+    char recvBuf[256] = {};
     while (true) {
-        //循环接入客户端，并发送一个数据
-        clientSock = accept(sock, (sockaddr *) &clientAddr, &nAddrLen);
-        if (clientSock == INVALID_SOCKET) {
-            printf("接受客户连接失败...\n");
+        //5 接收客户端数据
+        int nLen = recv(clientSock, recvBuf, 256, 0);
+        if (nLen <= 0) {
+            printf("客户端退出, 任务结束\n");
             break;
-        } else {
-            printf("新客户连接成功: IP = %s\n", inet_ntoa(clientAddr.sin_addr));
         }
-        //5 send 向客户端发送一条数据
-        send(clientSock, msyBuf, strlen(msyBuf) + 1, 0);
+        else {
+            printf("收到的数据是：%s\n", recvBuf);
+        }
+        //6 处理请求
+        if (0 == strcmp(recvBuf, "getName")) {
+            char msyBuf[] = "john";
+            send(clientSock, msyBuf, strlen(msyBuf) + 1, 0);
+        }
+        else if (0 == strcmp(recvBuf, "getAge")) {
+            char msyBuf[] = "18";
+            send(clientSock, msyBuf, strlen(msyBuf)+1, 0);
+        }
+        else {
+            char msyBuf[] = "???";
+            send(clientSock, msyBuf, strlen(msyBuf)+1, 0);
+        }
+
     }
     //6 关闭套接字
     close(sock);
