@@ -1,7 +1,6 @@
 //
-// Created by 孙卓文 on 2020/4/6.
+// Created by 孙卓文 on 2020/4/5.
 //
-
 #include <iostream>
 #include <cstdio>
 #include <unistd.h>
@@ -11,6 +10,11 @@
 #define INVALID_SOCKET  (SOCKET)(~0)
 #define SOCKET_ERROR            (-1)
 
+struct DataPackage
+{
+    int age;
+    char name[32];
+};
 
 int main_fun(){
     // 1 建立一个socket
@@ -34,7 +38,6 @@ int main_fun(){
     while (true) {
         // 3 输入请求命令
         char sendBuf[256] = {};
-        // std::cin >> sendBuf;
         printf("请输入命令：");
         scanf("%s", sendBuf);
         // 4 处理请求
@@ -44,10 +47,10 @@ int main_fun(){
         // 5 发送请求
         send(sock, sendBuf, strlen(sendBuf)+1, 0);
         // 6 接受服务器信息 recv
-        char recvBuf[256] = {};
-        int msyLen = recv(sock, recvBuf, 256, 0); //返回接收到数据的长度
+        DataPackage dp = {};
+        int msyLen = recv(sock, &dp, sizeof(dp), 0); //返回接收到数据的长度
         if (msyLen > 0)
-            std::cout << "recvBuf: " << recvBuf << std::endl;
+            std::cout << "name:" << dp.name << "\n" << "age:" <<  dp.age << std::endl;
         else {
             std::cout << "No message!" << std::endl;
             break;

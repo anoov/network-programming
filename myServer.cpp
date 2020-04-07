@@ -10,6 +10,12 @@
 #define INVALID_SOCKET  (SOCKET)(~0)
 #define SOCKET_ERROR            (-1)
 
+struct DataPackage
+{
+    int age;
+    char name[32];
+};
+
 int main_fun2() {
     //1 建立一个socket
     SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -53,17 +59,13 @@ int main_fun2() {
             printf("收到的数据是：%s\n", recvBuf);
         }
         //6 处理请求
-        if (0 == strcmp(recvBuf, "getName")) {
-            char msyBuf[] = "john";
-            send(clientSock, msyBuf, strlen(msyBuf) + 1, 0);
-        }
-        else if (0 == strcmp(recvBuf, "getAge")) {
-            char msyBuf[] = "18";
-            send(clientSock, msyBuf, strlen(msyBuf)+1, 0);
+        if (0 == strcmp(recvBuf, "getInfo")) {
+            DataPackage dp = {18, "john"};
+            send(clientSock, &dp, sizeof(dp), 0);
         }
         else {
-            char msyBuf[] = "???";
-            send(clientSock, msyBuf, strlen(msyBuf)+1, 0);
+            DataPackage dp = {-1, "invalid"};
+            send(clientSock, &dp, sizeof(dp), 0);
         }
 
     }
