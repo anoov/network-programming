@@ -97,20 +97,22 @@ int main_fun2() {
     while (true) {
         //5 接收客户端数据
         //5.1 接受数据头
-        DataHeader header = {};
-        int nLen = recv(clientSock, &header, sizeof(header), 0);
+        //使用缓冲区来接受数据
+        char szRecv[1024] = {};
+        int nLen = recv(clientSock, &szRecv, sizeof(DataHeader), 0);
+        DataHeader* header = (DataHeader *)szRecv;
         if (nLen <= 0) {
             printf("客户端退出, 任务结束\n");
             break;
         }
 
-        switch (header.cmd) {
+        switch (header->cmd) {
             case CMD_LOGIN:
                 {
-                    Login login = {};
-                    recv(clientSock, (char *)&login+sizeof(DataHeader), sizeof(Login) - sizeof(header), 0);
+                    recv(clientSock, szRecv+sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
+                    Login* login = (Login *)szRecv;
                     printf("收到命令：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
-                            login.dataLength, login.userName, login.passWord);
+                            login->dataLength, login->userName, login->passWord);
                     //忽略判断用户名和密码
                     LoginResult ret;
                     send(clientSock, &ret, sizeof(LoginResult), 0);
@@ -118,10 +120,10 @@ int main_fun2() {
                 break;
             case CMD_LOGOUT:
                 {
-                    LogOut loginOut = {};
-                    recv(clientSock, (char *)&loginOut+sizeof(DataHeader), sizeof(loginOut)-sizeof(header), 0);
+                    recv(clientSock, szRecv+sizeof(DataHeader), header->dataLength-sizeof(DataHeader), 0);
+                    LogOut* loginOut = (LogOut *)szRecv;
                     printf("收到命令：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
-                           loginOut.dataLength, loginOut.userName);
+                           loginOut->dataLength, loginOut->userName);
                     //忽略判断用户名和密码
                     LoginOutResult ret;
                     send(clientSock, &ret, sizeof(LoginOutResult), 0);
@@ -130,9 +132,9 @@ int main_fun2() {
                 break;
             default:
                 {
-                    header.cmd = CMD_ERROR;
-                    header.dataLength = 0;
-                    send(clientSock, &header, sizeof(header), 0);
+                    header->cmd = CMD_ERROR;
+                    header->dataLength = 0;
+                    send(clientSock, &header, sizeof(DataHeader), 0);
                 }
                 break;
         }
