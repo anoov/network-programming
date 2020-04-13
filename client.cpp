@@ -10,11 +10,37 @@
 #define INVALID_SOCKET  (SOCKET)(~0)
 #define SOCKET_ERROR            (-1)
 
-struct DataPackage
+enum CMD
 {
-    int age;
-    char name[32];
+    CMD_LOGIN,
+    CMD_LOGINOUT,
+    CMD_ERROR
 };
+
+struct DataHead
+{
+    short dataLength;  //数据长度
+    short cmd;         //命令
+};
+
+struct Login
+{
+    char userName[32];
+    char passWord[32];
+};
+struct LoginResult
+{
+    int result;
+};
+struct LoginOut
+{
+    char userName[32];
+};
+struct LoginOutResult
+{
+    int result;
+};
+
 
 int main_fun(){
     // 1 建立一个socket
@@ -42,19 +68,48 @@ int main_fun(){
         scanf("%s", sendBuf);
         // 4 处理请求
         if (0 == strcmp(sendBuf, "exit")) {
+            printf("收到exit命令，任务结束！");
             break;
         }
-        // 5 发送请求
-        send(sock, sendBuf, strlen(sendBuf)+1, 0);
-        // 6 接受服务器信息 recv
-        DataPackage dp = {};
-        int msyLen = recv(sock, &dp, sizeof(dp), 0); //返回接收到数据的长度
-        if (msyLen > 0)
-            std::cout << "name:" << dp.name << "\n" << "age:" <<  dp.age << std::endl;
+        else if (0 == strcmp(sendBuf, "login")) {
+            Login login = {"lyd", "lydmm"};
+            DataHead dh = {sizeof(login),CMD_LOGIN};
+            send(sock, &dh, sizeof(dh), 0);
+            send(sock, &login, sizeof(login), 0);
+            //接受服务器返回的数据
+            DataHead retHeader = {};
+            LoginResult loginRet = {};
+            recv(sock, &retHeader, sizeof(retHeader), 0);
+            recv(sock, &loginRet, sizeof(loginRet), 0);
+            printf("LoginResult: %d\n", loginRet.result);
+
+        }
+        else if (0 == strcmp(sendBuf, "logout")) {
+            LoginOut logout = {"lyd"};
+            DataHead dh = {sizeof(logout),CMD_LOGIN};
+            send(sock, &dh, sizeof(dh), 0);
+            send(sock, &logout, sizeof(logout), 0);
+            //接受服务器返回的数据
+            DataHead retHeader = {};
+            LoginOutResult logoutRet = {};
+            recv(sock, &retHeader, sizeof(retHeader), 0);
+            recv(sock, &logoutRet, sizeof(logoutRet), 0);
+            printf("LogoutResult: %d\n", logoutRet.result);
+        }
         else {
-            std::cout << "No message!" << std::endl;
-            break;
+            printf("收到不支持的命令，请重新输入！\n");
         }
+//        // 5 向服务器发送请求命令
+//        send(sock, sendBuf, strlen(sendBuf)+1, 0);
+//        // 6 接受服务器信息 recv
+//        DataPackage dp = {};
+//        int msyLen = recv(sock, &dp, sizeof(dp), 0); //返回接收到数据的长度
+//        if (msyLen > 0)
+//            std::cout << "name:" << dp.name << "\n" << "age:" <<  dp.age << std::endl;
+//        else {
+//            std::cout << "No message!" << std::endl;
+//            break;
+//        }
     }
     // 4 关闭socket
     close(sock);

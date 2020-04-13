@@ -10,10 +10,35 @@
 #define INVALID_SOCKET  (SOCKET)(~0)
 #define SOCKET_ERROR            (-1)
 
-struct DataPackage
+enum CMD
 {
-    int age;
-    char name[32];
+    CMD_LOGIN,
+    CMD_LOGINOUT,
+    CMD_ERROR
+};
+
+struct DataHead
+{
+    short dataLength;  //数据长度
+    short cmd;         //命令
+};
+
+struct Login
+{
+    char userName[32];
+    char passWord[32];
+};
+struct LoginResult
+{
+    int result;
+};
+struct LoginOut
+{
+    char userName[32];
+};
+struct LoginOutResult
+{
+    int result;
 };
 
 int main_fun2() {
@@ -47,26 +72,49 @@ int main_fun2() {
     } else {
         printf("新客户连接成功: IP = %s\n", inet_ntoa(clientAddr.sin_addr));
     }
-    char recvBuf[256] = {};
+
     while (true) {
         //5 接收客户端数据
-        int nLen = recv(clientSock, recvBuf, 256, 0);
+        //5.1 接受数据头
+        DataHead header = {};
+        int nLen = recv(clientSock, &header, sizeof(header), 0);
         if (nLen <= 0) {
             printf("客户端退出, 任务结束\n");
             break;
         }
-        else {
-            printf("收到的数据是：%s\n", recvBuf);
+        printf("收到命令：%d, 数据长度：%d\n", header.cmd, header.dataLength);
+
+        switch (header.cmd) {
+            case CMD_LOGIN:
+                {
+                    Login login = {};
+                    recv(clientSock, &login, sizeof(Login), 0);
+                    //忽略判断用户名和密码
+                    LoginResult ret = {1};
+                    send(clientSock, &header, sizeof(DataHead), 0);
+                    send(clientSock, &ret, sizeof(LoginResult), 0);
+                }
+                break;
+            case CMD_LOGINOUT:
+                {
+                    LoginOut loginOut = {};
+                    recv(clientSock, &loginOut, sizeof(loginOut), 0);
+                    //忽略判断用户名和密码
+                    LoginOutResult ret = {2};
+                    send(clientSock, &header, sizeof(DataHead), 0);
+                    send(clientSock, &ret, sizeof(LoginOutResult), 0);
+
+                }
+                break;
+            default:
+                {
+                    header.cmd = CMD_ERROR;
+                    header.dataLength = 0;
+                    send(clientSock, &header, sizeof(header), 0);
+                }
+                break;
         }
-        //6 处理请求
-        if (0 == strcmp(recvBuf, "getInfo")) {
-            DataPackage dp = {18, "john"};
-            send(clientSock, &dp, sizeof(dp), 0);
-        }
-        else {
-            DataPackage dp = {-1, "invalid"};
-            send(clientSock, &dp, sizeof(dp), 0);
-        }
+
 
     }
     //6 关闭套接字
