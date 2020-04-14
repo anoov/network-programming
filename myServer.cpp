@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include<arpa/inet.h>
+#include <vector>
 #define SOCKET int
 #define INVALID_SOCKET  (SOCKET)(~0)
 #define SOCKET_ERROR            (-1)
@@ -62,6 +63,56 @@ struct LoginOutResult: public DataHeader
     int result;
 };
 
+std::vector<SOCKET> g_clients;
+
+int process(SOCKET clientSock)  {
+
+    //5 接收客户端数据
+    //5.1 接受数据头
+    //使用缓冲区来接受数据
+    char szRecv[1024] = {};
+    int nLen = recv(clientSock, &szRecv, sizeof(DataHeader), 0);
+    auto* header = (DataHeader *)szRecv;
+    if (nLen <= 0) {
+        printf("客户端退出, 任务结束\n");
+        return -1;
+    }
+
+    switch (header->cmd) {
+        case CMD_LOGIN:
+        {
+            recv(clientSock, szRecv+sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
+            Login* login = (Login *)szRecv;
+            printf("收到命令：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
+                   login->dataLength, login->userName, login->passWord);
+            //忽略判断用户名和密码
+            LoginResult ret;
+            send(clientSock, &ret, sizeof(LoginResult), 0);
+        }
+            break;
+        case CMD_LOGOUT:
+        {
+            recv(clientSock, szRecv+sizeof(DataHeader), header->dataLength-sizeof(DataHeader), 0);
+            LogOut* loginOut = (LogOut *)szRecv;
+            printf("收到命令：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
+                   loginOut->dataLength, loginOut->userName);
+            //忽略判断用户名和密码
+            LoginOutResult ret;
+            send(clientSock, &ret, sizeof(LoginOutResult), 0);
+
+        }
+            break;
+        default:
+        {
+            header->cmd = CMD_ERROR;
+            header->dataLength = 0;
+            send(clientSock, &header, sizeof(DataHeader), 0);
+        }
+            break;
+    }
+    return 0;
+}
+
 int main_fun2() {
     //1 建立一个socket
     SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -83,65 +134,71 @@ int main_fun2() {
         printf("监听网络端口成功...\n");
     }
 
-    //4 accept 等待接受客户连接
-    sockaddr_in clientAddr = {};
-    socklen_t nAddrLen = sizeof(sockaddr_in);
-    SOCKET clientSock = INVALID_SOCKET;
-    clientSock = accept(sock, (sockaddr *) &clientAddr, &nAddrLen);
-    if (clientSock == INVALID_SOCKET) {
-        printf("接受客户连接失败...\n");
-    } else {
-        printf("新客户连接成功: IP = %s\n", inet_ntoa(clientAddr.sin_addr));
-    }
-
     while (true) {
-        //5 接收客户端数据
-        //5.1 接受数据头
-        //使用缓冲区来接受数据
-        char szRecv[1024] = {};
-        int nLen = recv(clientSock, &szRecv, sizeof(DataHeader), 0);
-        DataHeader* header = (DataHeader *)szRecv;
-        if (nLen <= 0) {
-            printf("客户端退出, 任务结束\n");
+
+        //伯克利 socket
+        //第一个参数：集合中所有描述符的范围而不是数量，集合中最大值加一
+        //第二个参数：读描述符集合，告诉内核需要查询的需要读的套接字的集合
+        //第三个参数：写描述符集合
+        //第三个参数：异常描述符集合
+        //第四个参数：时间，再该时间内没有返回，则返回
+        fd_set fdRead;
+        fd_set fdWrite;
+        fd_set fdExcept;
+        FD_ZERO(&fdRead);   //清空集合中的数据
+        FD_ZERO(&fdWrite);   //清空集合中的数据
+        FD_ZERO(&fdExcept);   //清空集合中的数据
+
+        FD_SET(sock, &fdRead);
+        FD_SET(sock, &fdWrite);
+        FD_SET(sock, &fdExcept);
+        SOCKET maxSock = sock;
+        for (int i = (int)g_clients.size() - 1; i >= 0; i--) {
+            FD_SET(g_clients[i], &fdRead);//有没有客服需要接收
+            maxSock = std::max(maxSock, g_clients[i]);
+        }
+
+        timeval t = {1, 0};
+        int ret = select(maxSock+1, &fdRead, &fdWrite, &fdExcept, &t);
+        if (ret < 0) {
+            printf("select发生错误, 任务结束\n");
             break;
         }
+        if (FD_ISSET(sock, &fdRead)) {
+            FD_CLR(sock, &fdRead);
 
-        switch (header->cmd) {
-            case CMD_LOGIN:
-                {
-                    recv(clientSock, szRecv+sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
-                    Login* login = (Login *)szRecv;
-                    printf("收到命令：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
-                            login->dataLength, login->userName, login->passWord);
-                    //忽略判断用户名和密码
-                    LoginResult ret;
-                    send(clientSock, &ret, sizeof(LoginResult), 0);
-                }
-                break;
-            case CMD_LOGOUT:
-                {
-                    recv(clientSock, szRecv+sizeof(DataHeader), header->dataLength-sizeof(DataHeader), 0);
-                    LogOut* loginOut = (LogOut *)szRecv;
-                    printf("收到命令：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
-                           loginOut->dataLength, loginOut->userName);
-                    //忽略判断用户名和密码
-                    LoginOutResult ret;
-                    send(clientSock, &ret, sizeof(LoginOutResult), 0);
+            //4 accept 等待接受客户连接
+            sockaddr_in clientAddr = {};
+            socklen_t nAddrLen = sizeof(sockaddr_in);
+            SOCKET clientSock = INVALID_SOCKET;
 
-                }
-                break;
-            default:
-                {
-                    header->cmd = CMD_ERROR;
-                    header->dataLength = 0;
-                    send(clientSock, &header, sizeof(DataHeader), 0);
-                }
-                break;
+            clientSock = accept(sock, (sockaddr *) &clientAddr, &nAddrLen);
+            if (clientSock == INVALID_SOCKET) {
+                printf("接受客户连接失败...\n");
+            } else {
+                printf("新客户连接成功: socket = %d, IP = %s\n",(int)(clientSock), inet_ntoa(clientAddr.sin_addr));
+            }
+            g_clients.push_back(clientSock);
         }
 
-
+        for (int n = (int)g_clients.size() - 1; n >= 0; n--)
+        {
+            if (FD_ISSET(g_clients[n], &fdRead))
+            {
+                if (-1 == process(g_clients[n]))
+                {
+                    auto iter = g_clients.begin() + n;//std::vector<SOCKET>::iterator
+                    if (iter != g_clients.end())
+                    {
+                        g_clients.erase(iter);
+                    }
+                }
+            }
+        }
     }
     //6 关闭套接字
-    close(sock);
+    for (size_t n = 0; n < g_clients.size(); n++) {
+        close(g_clients[n]);
+    }
     return 0;
 }
