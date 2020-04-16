@@ -141,7 +141,7 @@ int main_fun2() {
         //第二个参数：读描述符集合，告诉内核需要查询的需要读的套接字的集合
         //第三个参数：写描述符集合
         //第三个参数：异常描述符集合
-        //第四个参数：时间，再该时间内没有返回，则返回
+        //第四个参数：时间，在该时间内没有返回，则返回
         fd_set fdRead;
         fd_set fdWrite;
         fd_set fdExcept;
@@ -149,21 +149,28 @@ int main_fun2() {
         FD_ZERO(&fdWrite);   //清空集合中的数据
         FD_ZERO(&fdExcept);   //清空集合中的数据
 
-        FD_SET(sock, &fdRead);
-        FD_SET(sock, &fdWrite);
-        FD_SET(sock, &fdExcept);
+        FD_SET(sock, &fdRead);      //让内核代理查看socket有没有读操作
+        FD_SET(sock, &fdWrite);     //让内核代理查看socket有没有写操作
+        FD_SET(sock, &fdExcept);    //让内核代理查看socket有没有异常操作
+
         SOCKET maxSock = sock;
         for (int i = (int)g_clients.size() - 1; i >= 0; i--) {
-            FD_SET(g_clients[i], &fdRead);//有没有客服需要接收
+            FD_SET(g_clients[i], &fdRead);//有没有客户需要接收
             maxSock = std::max(maxSock, g_clients[i]);
         }
 
         timeval t = {1, 0};
+        //若最后一个参数设置为null，则程序会阻塞到select这里，一直等到有数据可处理
+        //select监视三个集合中的所有描述符，在这里是套接字
+        //例如select的第二个参数读集合，
+        //若集合中的某一个socket有读操作，则保持该操作位，否则该操作位清零
         int ret = select(maxSock+1, &fdRead, &fdWrite, &fdExcept, &t);
         if (ret < 0) {
             printf("select发生错误, 任务结束\n");
             break;
         }
+
+        //若本socket有读操作，意味着有客户机连进来
         if (FD_ISSET(sock, &fdRead)) {
             FD_CLR(sock, &fdRead);
 
@@ -183,6 +190,7 @@ int main_fun2() {
 
         for (int n = (int)g_clients.size() - 1; n >= 0; n--)
         {
+            //如何客户socket数组中有读组操作，则说明有消息进来
             if (FD_ISSET(g_clients[n], &fdRead))
             {
                 if (-1 == process(g_clients[n]))
