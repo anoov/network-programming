@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include<arpa/inet.h>
+#include <thread>
 #define SOCKET int
 #define INVALID_SOCKET  (SOCKET)(~0)
 #define SOCKET_ERROR            (-1)
@@ -120,6 +121,36 @@ int process(SOCKET sock)  {
     }
     return 0;
 }
+bool g_bRun = true;
+void cmdThread(SOCKET sock) {
+    while (true) {
+        // 3 输入请求命令
+        char sendBuf[256] = {};
+        sleep(1);
+        printf("请输入命令：");
+        scanf("%s", sendBuf);
+
+        // 4 处理请求
+        if (0 == strcmp(sendBuf, "exit")) {
+            printf("退出cmdThread线程！\n");
+            g_bRun = false;
+            break;
+        } else if (0 == strcmp(sendBuf, "login")) {
+            Login login;
+            strcpy(login.userName, "lyd");
+            strcpy(login.passWord, "lydmima");
+            send(sock, &login, sizeof(login), 0);
+
+        } else if (0 == strcmp(sendBuf, "logout")) {
+            LogOut logout;
+            strcpy(logout.userName, "lyd");
+            send(sock, &logout, sizeof(logout), 0);
+        } else {
+            printf("收到不支持的命令，请重新输入！\n");
+        }
+    }
+
+}
 
 int main_fun(){
     // 1 建立一个socket
@@ -141,7 +172,12 @@ int main_fun(){
         printf("连接成功...\n");
     }
 
-    while (true) {
+//    启动线程函数
+    std::thread t1(cmdThread, sock);
+//    t1.detach();
+
+
+    while (g_bRun) {
 
         fd_set fdReader;
         FD_ZERO(&fdReader);
@@ -158,12 +194,7 @@ int main_fun(){
                 printf("select任务结束!\n");
             }
         }
-        Login login;
-        strcpy(login.userName, "lyd");
-        strcpy(login.passWord, "lydmima");
-        send(sock, &login, sizeof(login), 0);
-        sleep(1);
-        std::cout << "空闲时间处理其他业务" << std::endl;
+//        std::cout << "空闲时间处理其他业务" << std::endl;
 
 
 //        // 3 输入请求命令
@@ -172,7 +203,6 @@ int main_fun(){
 //        scanf("%s", sendBuf);
 ///        scanf是阻塞操作，有碍于测试
 
-//        char sendBuf[256] = "login";
 //
 //        // 4 处理请求
 //        if (0 == strcmp(sendBuf, "exit")) {
@@ -216,5 +246,6 @@ int main_fun(){
     }
     // 4 关闭socket
     close(sock);
+    t1.join();
     return 0;
 }

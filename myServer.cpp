@@ -196,13 +196,14 @@ int main_fun2() {
             if (clientSock == INVALID_SOCKET) {
                 printf("接受客户连接失败...\n");
             } else {
+                for (int n = (int)g_clients.size() - 1; n >= 0; n--) {
+                    NewUserJoin userJoin{};
+                    send(g_clients[n], &userJoin, sizeof(NewUserJoin), 0);
+                }
+                g_clients.push_back(clientSock);
                 printf("新客户连接成功: socket = %d, IP = %s\n",(int)(clientSock), inet_ntoa(clientAddr.sin_addr));
             }
-            for (int n = (int)g_clients.size() - 1; n >= 0; n--) {
-                NewUserJoin userJoin{};
-                send(g_clients[n], &userJoin, sizeof(NewUserJoin), 0);
-            }
-            g_clients.push_back(clientSock);
+
         }
 
         for (int n = (int)g_clients.size() - 1; n >= 0; n--)
@@ -220,7 +221,7 @@ int main_fun2() {
                 }
             }
         }
-        std::cout << "空闲时间处理其他业务" << std::endl;
+//        std::cout << "空闲时间处理其他业务" << std::endl;
 
     }
     //6 关闭套接字
