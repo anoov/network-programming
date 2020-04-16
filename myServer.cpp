@@ -17,6 +17,7 @@ enum CMD
     CMD_LOGIN_RESULT,
     CMD_LOGOUT,
     CMD_LOGOUT_RESULT,
+    CMD_NEW_USER_JOIN,
     CMD_ERROR
 };
 
@@ -62,6 +63,17 @@ struct LoginOutResult: public DataHeader
     }
     int result;
 };
+//有新客户端加入，群发给所有的客户端
+struct NewUserJoin : public DataHeader
+{
+    NewUserJoin()
+    {
+        dataLength = sizeof(NewUserJoin);
+        cmd = CMD_NEW_USER_JOIN;
+        scok = 0;
+    }
+    int scok;
+};
 
 std::vector<SOCKET> g_clients;
 
@@ -70,11 +82,11 @@ int process(SOCKET clientSock)  {
     //5 接收客户端数据
     //5.1 接受数据头
     //使用缓冲区来接受数据
-    char szRecv[1024] = {};
-    int nLen = recv(clientSock, &szRecv, sizeof(DataHeader), 0);
+    char szRecv[4096] = {};
+    int nLen = recv(clientSock, szRecv, sizeof(DataHeader), 0);
     auto* header = (DataHeader *)szRecv;
     if (nLen <= 0) {
-        printf("客户端退出, 任务结束\n");
+        printf("客户端<Socket = %d>退出, 任务结束\n", clientSock);
         return -1;
     }
 
@@ -83,8 +95,8 @@ int process(SOCKET clientSock)  {
         {
             recv(clientSock, szRecv+sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
             Login* login = (Login *)szRecv;
-            printf("收到命令：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
-                   login->dataLength, login->userName, login->passWord);
+            printf("收到<Socket = %d>请求：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
+                   clientSock, login->dataLength, login->userName, login->passWord);
             //忽略判断用户名和密码
             LoginResult ret;
             send(clientSock, &ret, sizeof(LoginResult), 0);
@@ -94,8 +106,8 @@ int process(SOCKET clientSock)  {
         {
             recv(clientSock, szRecv+sizeof(DataHeader), header->dataLength-sizeof(DataHeader), 0);
             LogOut* loginOut = (LogOut *)szRecv;
-            printf("收到命令：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
-                   loginOut->dataLength, loginOut->userName);
+            printf("收到<Socket = %d>请求：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
+                   clientSock ,loginOut->dataLength, loginOut->userName);
             //忽略判断用户名和密码
             LoginOutResult ret;
             send(clientSock, &ret, sizeof(LoginOutResult), 0);
@@ -119,7 +131,7 @@ int main_fun2() {
     //2 bind 绑定用于接受客户端的连接和网络端口
     sockaddr_in _sin{};
     _sin.sin_family = AF_INET;
-    _sin.sin_port = htons(4567);    //host to net unsigned short
+    _sin.sin_port = htons(8000);    //host to net unsigned short
     _sin.sin_addr.s_addr = inet_addr("127.0.0.1");
     if (bind(sock, (sockaddr*)& _sin, sizeof(_sin)) == SOCKET_ERROR) {
         printf("绑定网络端口失败...\n");
@@ -165,6 +177,7 @@ int main_fun2() {
         //例如select的第二个参数读集合，
         //若集合中的某一个socket有读操作，则保持该操作位，否则该操作位清零
         int ret = select(maxSock+1, &fdRead, &fdWrite, &fdExcept, &t);
+
         if (ret < 0) {
             printf("select发生错误, 任务结束\n");
             break;
@@ -185,6 +198,10 @@ int main_fun2() {
             } else {
                 printf("新客户连接成功: socket = %d, IP = %s\n",(int)(clientSock), inet_ntoa(clientAddr.sin_addr));
             }
+            for (int n = (int)g_clients.size() - 1; n >= 0; n--) {
+                NewUserJoin userJoin{};
+                send(g_clients[n], &userJoin, sizeof(NewUserJoin), 0);
+            }
             g_clients.push_back(clientSock);
         }
 
@@ -203,6 +220,8 @@ int main_fun2() {
                 }
             }
         }
+        std::cout << "空闲时间处理其他业务" << std::endl;
+
     }
     //6 关闭套接字
     for (size_t n = 0; n < g_clients.size(); n++) {
