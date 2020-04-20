@@ -21,6 +21,28 @@
 #include <vector>
 #include "DataStruct.h"
 
+class ClientSocket
+{
+public:
+    explicit ClientSocket(SOCKET s = INVALID_SOCKET){
+        _sockFd = s;
+        memset(_szMsgBuf, 0, sizeof(_szMsgBuf));
+        _lastPos = 0;
+    }
+    SOCKET GetSock() const {return _sockFd;}
+    char *GetMsg() {return _szMsgBuf;}
+    int GetPos() const {return _lastPos;}
+    void SetPos(int pos) {_lastPos = pos;};
+private:
+    SOCKET _sockFd;
+    //以下解决粘包和拆分包需要的变量
+    //接收缓冲区
+    static const int RECV_BUFF_SIZE = 10240;
+    //第二缓冲区  消息缓冲区
+    char _szMsgBuf[RECV_BUFF_SIZE*10] = {};
+    int _lastPos;                        //指向缓冲区有数据的末尾位置
+};
+
 class EasyTCPServer
 {
 public:
@@ -28,7 +50,7 @@ public:
         _sock = INVALID_SOCKET;
     }
     virtual ~EasyTCPServer() {
-
+        Close();
     }
     //初始化socket
     int InitSocket();
@@ -43,9 +65,9 @@ public:
     //是否工作中
     bool IsRun();
     //接收数据  处理粘包 拆分包
-    int RecvData(SOCKET clientSock);
+    int RecvData(ClientSocket* clientSock);
     //响应网络消息
-    void OnNetMsg(SOCKET clientSock, DataHeader *header, char *szRecv);
+    virtual void OnNetMsg(SOCKET clientSock, DataHeader *header);
     //发送指定socket数据
     int SendData(SOCKET client, DataHeader *header);
     //群发
@@ -55,7 +77,10 @@ public:
 
 private:
     SOCKET _sock;
-    std::vector<SOCKET> clients;
+    std::vector<ClientSocket*> _clients;
+    //第一缓冲区（第二缓冲区封装在ClientSocket里面）
+    static const int RECV_BUFF_SIZE = 10240;
+    char _szRecv[RECV_BUFF_SIZE] = {};
 
 };
 
@@ -103,9 +128,9 @@ int EasyTCPServer::ListenPort(int n) {
 
 void EasyTCPServer::Close() {
     if (_sock != INVALID_SOCKET) {
-        for (int& client : clients) {
-            close(client);
-            client = INVALID_SOCKET;
+        for (auto & _client : _clients) {
+            close(_client->GetSock());
+            delete _client;
         }
         close(_sock);
         _sock = INVALID_SOCKET;
@@ -125,7 +150,7 @@ SOCKET EasyTCPServer::Accept() {
     } else {
         NewUserJoin userJoin{};
         SendDataToAll(&userJoin);
-        clients.push_back(clientSock);
+        _clients.push_back(new ClientSocket(clientSock));
         printf("<Socket=%d>接受新客户连接成功: socket = %d, IP = %s\n",
                 _sock, (int)(clientSock), inet_ntoa(clientAddr.sin_addr));
     }
@@ -152,9 +177,9 @@ bool EasyTCPServer::OnRun() {
         FD_SET(_sock, &fdExcept);    //让内核代理查看socket有没有异常操作
 
         SOCKET maxSock = _sock;
-        for (int i = (int) clients.size() - 1; i >= 0; i--) {
-            FD_SET(clients[i], &fdRead);//有没有客户需要接收
-            maxSock = std::max(maxSock, clients[i]);
+        for (int i = (int) _clients.size() - 1; i >= 0; i--) {
+            FD_SET(_clients[i]->GetSock(), &fdRead);//有没有客户需要接收
+            maxSock = std::max(maxSock, _clients[i]->GetSock());
         }
 
         timeval t = {1, 0};
@@ -179,13 +204,14 @@ bool EasyTCPServer::OnRun() {
 
         }
 
-        for (int n = (int) clients.size() - 1; n >= 0; n--) {
+        for (int n = (int) _clients.size() - 1; n >= 0; n--) {
             //如何客户socket数组中有读组操作，则说明有消息进来
-            if (FD_ISSET(clients[n], &fdRead)) {
-                if (-1 == RecvData(clients[n])) {
-                    auto iter = clients.begin() + n;//std::vector<SOCKET>::iterator
-                    if (iter != clients.end()) {
-                        clients.erase(iter);
+            if (FD_ISSET(_clients[n]->GetSock(), &fdRead)) {
+                if (-1 == RecvData(_clients[n])) {
+                    auto iter = _clients.begin() + n;//std::vector<SOCKET>::iterator
+                    if (iter != _clients.end()) {
+                        delete _clients[n];
+                        _clients.erase(iter);
                     }
                 }
             }
@@ -199,24 +225,41 @@ bool EasyTCPServer::IsRun() {
     return _sock != INVALID_SOCKET;
 }
 
-int EasyTCPServer::RecvData(SOCKET clientSock) {
-    char szRecv[4096] = {};
-    int nLen = (int)recv(clientSock, szRecv, sizeof(DataHeader), 0);
-    auto* header = (DataHeader *)szRecv;
+int EasyTCPServer::RecvData(ClientSocket* clientSock) {
+    int nLen = (int)recv(clientSock->GetSock(), _szRecv, sizeof(RECV_BUFF_SIZE), 0);
+    //auto* header = (DataHeader *)szRecv;
     if (nLen <= 0) {
-        printf("客户端<Socket = %d>退出, 任务结束\n", clientSock);
+        printf("客户端<Socket = %d>退出, 任务结束\n", clientSock->GetSock());
         return -1;
     }
-    recv(clientSock, szRecv+sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
-    OnNetMsg(clientSock, header, szRecv);
+    //将收取到的数据拷贝到消息缓冲区
+    memcpy(clientSock->GetMsg() + clientSock->GetPos(), _szRecv, nLen);
+    clientSock->SetPos(clientSock->GetPos()+nLen);
+    //判断收到消息的长度是否大于消息头的长度，若大于消息头的长度，就可以取出消息体的长度
+    while (clientSock->GetPos() >= sizeof(DataHeader)) {
+        auto *header = (DataHeader*)clientSock->GetMsg();
+        //判断收到消息的长度是否大于消息体的长度，若大于消息体的长度，就可以取出消息体
+        if (clientSock->GetPos() >= header->dataLength) {
+            //此时消息缓冲中有两部分数据，一部分是待处理的数据，第二部分是下一次处理的数据
+            //消息缓冲区中未处理消息的长度
+            int nSize = clientSock->GetPos() - header->dataLength;  //消息缓冲中收到的数据总长度减去将要处理的数据的长度
+            OnNetMsg(clientSock->GetSock(), header);
+            //通过掩盖的方法将处理过的数据清除
+            memcpy(clientSock->GetMsg(), clientSock->GetMsg() + header->dataLength, nSize);
+            clientSock->SetPos(nSize);
+        } else {
+            //剩余的消息虽然大于消息头但是小于消息体
+            break;
+        }
+    }
     return 0;
 }
 
-void EasyTCPServer::OnNetMsg(SOCKET clientSock, DataHeader *header, char *szRecv) {
+void EasyTCPServer::OnNetMsg(SOCKET clientSock, DataHeader *header) {
     switch (header->cmd) {
         case CMD_LOGIN:
         {
-            Login* login = (Login *)szRecv;
+            Login* login = (Login *)header;
             printf("收到<Socket = %d>请求：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
                    clientSock, login->dataLength, login->userName, login->passWord);
             //忽略判断用户名和密码
@@ -226,7 +269,7 @@ void EasyTCPServer::OnNetMsg(SOCKET clientSock, DataHeader *header, char *szRecv
             break;
         case CMD_LOGOUT:
         {
-            LogOut* loginOut = (LogOut *)szRecv;
+            LogOut* loginOut = (LogOut *)header;
             printf("收到<Socket = %d>请求：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
                    clientSock ,loginOut->dataLength, loginOut->userName);
             //忽略判断用户名和密码
@@ -253,8 +296,8 @@ int EasyTCPServer::SendData(SOCKET client, DataHeader *header) {
 }
 
 void EasyTCPServer::SendDataToAll(DataHeader *header) {
-    for (auto client: clients) {
-        SendData(client, header);
+    for (auto client: _clients) {
+        SendData(client->GetSock(), header);
     }
 }
 
