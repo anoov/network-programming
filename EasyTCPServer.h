@@ -4,8 +4,9 @@
 
 #ifndef EASYTCPSERVER_EASYTCPSERVER_H
 #define EASYTCPSERVER_EASYTCPSERVER_H
+#define FD_SETSIZE      3000
 #include <iostream>
-#include <cstdio>
+#include <stdio.h>
 #ifdef _WIN32
     #include <windows.h>
     #include <winsock2.h>
@@ -19,7 +20,9 @@
 #endif
 
 #include <vector>
+#include <string.h>
 #include "DataStruct.h"
+#include "CELLTimestamp.h"
 
 class ClientSocket
 {
@@ -29,9 +32,9 @@ public:
         memset(_szMsgBuf, 0, sizeof(_szMsgBuf));
         _lastPos = 0;
     }
-    SOCKET GetSock() const {return _sockFd;}
+    SOCKET GetSock() {return _sockFd;}
     char *GetMsg() {return _szMsgBuf;}
-    int GetPos() const {return _lastPos;}
+    int GetPos()  {return _lastPos;}
     void SetPos(int pos) {_lastPos = pos;};
 private:
     SOCKET _sockFd;
@@ -41,6 +44,8 @@ private:
     //第二缓冲区  消息缓冲区
     char _szMsgBuf[RECV_BUFF_SIZE*10] = {};
     int _lastPos;                        //指向缓冲区有数据的末尾位置
+
+
 };
 
 class EasyTCPServer
@@ -48,6 +53,7 @@ class EasyTCPServer
 public:
     explicit EasyTCPServer() {
         _sock = INVALID_SOCKET;
+        _recvCount = 0;
     }
     virtual ~EasyTCPServer() {
         Close();
@@ -55,9 +61,9 @@ public:
     //初始化socket
     int InitSocket();
     //绑定IP, 端口号
-    int BindPort(const char *ip, unsigned short port);
+    int Bind(const char *ip, unsigned short port);
     //监听端口号
-    int ListenPort(int n);
+    int Listen(int n);
     //接收客户端连接
     SOCKET Accept();
     //处理网络消息
@@ -82,6 +88,9 @@ private:
     static const int RECV_BUFF_SIZE = 10240;
     char _szRecv[RECV_BUFF_SIZE] = {};
 
+    CELLTimeStamp _tTime;
+    int _recvCount;
+
 };
 
 int EasyTCPServer::InitSocket() {
@@ -90,7 +99,7 @@ int EasyTCPServer::InitSocket() {
         printf("<socket = %d>关闭之前的连接...\n", _sock);
         Close();
     }
-    _sock = socket(AF_INET, SOCK_STREAM, 0);
+    _sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (_sock == INVALID_SOCKET) {
         printf("建立套接字失败...\n");
     } else {
@@ -99,7 +108,7 @@ int EasyTCPServer::InitSocket() {
     return _sock;
 }
 
-int EasyTCPServer::BindPort(const char *ip, unsigned short port) {
+int EasyTCPServer::Bind(const char *ip, unsigned short port) {
     if (_sock == INVALID_SOCKET) {
         InitSocket();
     }
@@ -116,7 +125,7 @@ int EasyTCPServer::BindPort(const char *ip, unsigned short port) {
     return ret;
 }
 
-int EasyTCPServer::ListenPort(int n) {
+int EasyTCPServer::Listen(int n) {
     int ret = listen(_sock, n);
     if (ret == SOCKET_ERROR){
         printf("<Socket=%d>监听网络端口失败...\n", _sock);
@@ -148,8 +157,8 @@ SOCKET EasyTCPServer::Accept() {
     if (clientSock == INVALID_SOCKET) {
         printf("<Socket=%d>接受客户连接失败...\n", _sock);
     } else {
-        NewUserJoin userJoin{};
-        SendDataToAll(&userJoin);
+        //NewUserJoin userJoin{};
+        //SendDataToAll(&userJoin);
         _clients.push_back(new ClientSocket(clientSock));
         printf("<Socket=%d>接受新客户连接成功: socket = %d, IP = %s\n",
                 _sock, (int)(clientSock), inet_ntoa(clientAddr.sin_addr));
@@ -179,7 +188,11 @@ bool EasyTCPServer::OnRun() {
         SOCKET maxSock = _sock;
         for (int i = (int) _clients.size() - 1; i >= 0; i--) {
             FD_SET(_clients[i]->GetSock(), &fdRead);//有没有客户需要接收
-            maxSock = std::max(maxSock, _clients[i]->GetSock());
+//            maxSock = std::max(maxSock, _clients[i]->GetSock());
+            if (maxSock < _clients[i]->GetSock())
+            {
+                maxSock = _clients[i]->GetSock();
+            }
         }
 
         timeval t = {1, 0};
@@ -201,7 +214,7 @@ bool EasyTCPServer::OnRun() {
 
             //4 accept 等待接受客户连接
             Accept();
-
+            return true;
         }
 
         for (int n = (int) _clients.size() - 1; n >= 0; n--) {
@@ -219,6 +232,8 @@ bool EasyTCPServer::OnRun() {
         return true;
     }
     return false ;
+
+
 }
 
 bool EasyTCPServer::IsRun() {
@@ -226,7 +241,7 @@ bool EasyTCPServer::IsRun() {
 }
 
 int EasyTCPServer::RecvData(ClientSocket* clientSock) {
-    int nLen = (int)recv(clientSock->GetSock(), _szRecv, sizeof(RECV_BUFF_SIZE), 0);
+    int nLen = (int)recv(clientSock->GetSock(), _szRecv, RECV_BUFF_SIZE, 0);
     //auto* header = (DataHeader *)szRecv;
     if (nLen <= 0) {
         printf("客户端<Socket = %d>退出, 任务结束\n", clientSock->GetSock());
@@ -253,36 +268,45 @@ int EasyTCPServer::RecvData(ClientSocket* clientSock) {
         }
     }
     return 0;
+
 }
 
 void EasyTCPServer::OnNetMsg(SOCKET clientSock, DataHeader *header) {
+    _recvCount++;
+    auto t1 = _tTime.getElapsedSecond();
+    if (t1 >= 1.0) {
+        printf("time<%lf>, socket<%d> recvCount<%d>\n", t1, clientSock, _recvCount);
+        _recvCount = 0;
+        _tTime.update();
+    }
     switch (header->cmd) {
         case CMD_LOGIN:
         {
             Login* login = (Login *)header;
-            printf("收到<Socket = %d>请求：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
-                   clientSock, login->dataLength, login->userName, login->passWord);
+            //printf("收到<Socket = %3d>请求：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
+            //       clientSock, login->dataLength, login->userName, login->passWord);
             //忽略判断用户名和密码
-            LoginResult ret;
-            send(clientSock, &ret, sizeof(LoginResult), 0);
+            //LoginResult ret;
+            //send(clientSock, &ret, sizeof(LoginResult), 0);
         }
             break;
         case CMD_LOGOUT:
         {
             LogOut* loginOut = (LogOut *)header;
-            printf("收到<Socket = %d>请求：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
-                   clientSock ,loginOut->dataLength, loginOut->userName);
+            //printf("收到<Socket = %3d>请求：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
+            //       clientSock ,loginOut->dataLength, loginOut->userName);
             //忽略判断用户名和密码
-            LoginOutResult ret;
-            send(clientSock, &ret, sizeof(LoginOutResult), 0);
+            //LoginOutResult ret;
+            //send(clientSock, &ret, sizeof(LoginOutResult), 0);
 
         }
             break;
         default:
         {
-            header->cmd = CMD_ERROR;
-            header->dataLength = 0;
-            send(clientSock, &header, sizeof(DataHeader), 0);
+            printf("收到<socket = %3d>未定义的消息，数据长度为: %d\n", clientSock, header->dataLength);
+            //header->cmd = CMD_ERROR;
+            //header->dataLength = 0;
+            //send(clientSock, &header, sizeof(DataHeader), 0);
         }
             break;
     }
@@ -302,3 +326,5 @@ void EasyTCPServer::SendDataToAll(DataHeader *header) {
 }
 
 #endif //EASYTCPSERVER_EASYTCPSERVER_H
+
+
