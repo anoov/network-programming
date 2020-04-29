@@ -240,37 +240,6 @@ int CellServer::RecvData(ClientSocket* clientSock) {
 
 void CellServer::OnNetMsg(ClientSocket* clientSock, DataHeader *header) {
     _pNetEvent->OnNetMsg(clientSock, header);
-    switch (header->cmd) {
-        case CMD_LOGIN:
-        {
-            Login* login = (Login *)header;
-            //printf("收到<Socket = %3d>请求：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
-            //       clientSock, login->dataLength, login->userName, login->passWord);
-            //忽略判断用户名和密码
-            LoginResult ret;
-            clientSock->SendData(&ret);
-        }
-            break;
-        case CMD_LOGOUT:
-        {
-            LogOut* loginOut = (LogOut *)header;
-            //printf("收到<Socket = %3d>请求：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
-            //       clientSock ,loginOut->dataLength, loginOut->userName);
-            //忽略判断用户名和密码
-            LoginOutResult ret;
-            clientSock->SendData(&ret);
-        }
-            break;
-        default:
-        {
-            printf("收到<socket = %3d>未定义的消息，数据长度为: %d\n", clientSock->GetSock(), header->dataLength);
-            header->cmd = CMD_ERROR;
-            header->dataLength = 0;
-            clientSock->SendData(header);
-        }
-            break;
-    }
-
 }
 
 void CellServer::AddClient(ClientSocket* pClient) {
@@ -332,9 +301,11 @@ private:
     char _szRecv[RECV_BUFF_SIZE] = {};
 
     //static const int CELL_SERVER_THREAD_COUNT = 4;
+
     //每秒消息计时
     CELLTimeStamp _tTime;
 
+protected:
     std::atomic_int _recvCount{};
     //客户端进入计数
     std::atomic_int _clientCount{};
