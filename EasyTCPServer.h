@@ -68,6 +68,9 @@ public:
     virtual void OnNetMsg(ClientSocket* clientSock, DataHeader* header) = 0;
     //客户端加入时间
     virtual void OnJoin(ClientSocket* clientSocket) = 0;
+    //recv事件
+    virtual void OnNetRecv(ClientSocket* pClient) = 0;
+
 private:
 };
 
@@ -122,9 +125,17 @@ private:
 
     INETEvent* _pNetEvent;
 
+    //用于改进 2020 04 29 CellServer::OnRun
+    //备份客户socket fd_set
+    fd_set _fdRead_back;
+    //客户列表是否有变化
+    bool _clients_change;
+    SOCKET _maxSock;
+
 };
 
 bool CellServer::OnRun() {
+    _clients_change = true;
     while (IsRun()) {
         if (!_clientsBuff.empty()) {
             //从缓冲队列中取出客户数据
@@ -133,6 +144,7 @@ bool CellServer::OnRun() {
                 _clients.push_back(pClient);
             }
             _clientsBuff.clear();
+            _clients_change = true;
         }
         //如何没有需要处理的客户端，跳过以下代码
         if (_clients.empty()) {
@@ -148,15 +160,16 @@ bool CellServer::OnRun() {
         //第四个参数：时间，在该时间内没有返回，则返回
         fd_set fdRead;
         FD_ZERO(&fdRead);   //清空集合中的数据
-
-//        FD_SET(_sock, &fdRead);      //让内核代理查看socket有没有读操作
-//        FD_SET(_sock, &fdWrite);     //让内核代理查看socket有没有写操作
-//        FD_SET(_sock, &fdExcept);    //让内核代理查看socket有没有异常操作
-
-        SOCKET maxSock = _clients[0]->GetSock();
-        for (int i = (int) _clients.size() - 1; i >= 0; i--) {
-            FD_SET(_clients[i]->GetSock(), &fdRead);//有没有客户需要接收
-            maxSock = std::max(maxSock, _clients[i]->GetSock());
+        if (_clients_change) {
+            _clients_change = false;
+            _maxSock = _clients[0]->GetSock();
+            for (int i = (int) _clients.size() - 1; i >= 0; i--) {
+                FD_SET(_clients[i]->GetSock(), &fdRead);//有没有客户需要接收
+                _maxSock = std::max(_maxSock, _clients[i]->GetSock());
+            }
+            memcpy(&_fdRead_back, &fdRead, sizeof(_fdRead_back));
+        } else {
+            memcpy(&fdRead, &_fdRead_back, sizeof(_fdRead_back));
         }
 
         timeval t = {1, 0};
@@ -164,12 +177,15 @@ bool CellServer::OnRun() {
         //select监视三个集合中的所有描述符，在这里是套接字
         //例如select的第二个参数读集合，
         //若集合中的某一个socket有读操作，则保持该操作位，否则该操作位清零
-        int ret = select(maxSock + 1, &fdRead, nullptr, nullptr, nullptr);
+        int ret = select(_maxSock + 1, &fdRead, nullptr, nullptr, nullptr); //每个线程的任务只是查询消息，采用阻塞方式更好
 
         if (ret < 0) {
             printf("select发生错误, 任务结束\n");
             Close();
             return false;
+        } else if (ret == 0) {
+            //ret == 0说明没有可处理的数据，下面的代码跳过
+            continue;
         }
 
         for (int n = (int) _clients.size() - 1; n >= 0; n--) {
@@ -178,6 +194,7 @@ bool CellServer::OnRun() {
                 if (-1 == RecvData(_clients[n])) {
                     auto iter = _clients.begin() + n;//std::vector<SOCKET>::iterator
                     if (iter != _clients.end()) {
+                        _clients_change = true;
                         if (_pNetEvent)
                             _pNetEvent->OnLeave(_clients[n]);
                         delete _clients[n];
@@ -208,6 +225,7 @@ void CellServer::Close() {
 
 int CellServer::RecvData(ClientSocket* clientSock) {
     int nLen = (int)recv(clientSock->GetSock(), _szRecv, RECV_BUFF_SIZE, 0);
+    _pNetEvent->OnNetRecv(clientSock);
     //auto* header = (DataHeader *)szRecv;
     if (nLen <= 0) {
         //printf("客户端<Socket = %d>退出, 任务结束\n", clientSock->GetSock());
@@ -259,8 +277,9 @@ class EasyTCPServer : public INETEvent
 public:
     explicit EasyTCPServer() {
         _sock = INVALID_SOCKET;
-        _recvCount = 0;
+        _msgCount = 0;
         _clientCount = 0;
+        _recvCount = 0;
     }
     virtual ~EasyTCPServer() {
         Close();
@@ -292,6 +311,8 @@ public:
 
     void OnJoin(ClientSocket* clientSocket) override ;
 
+    void OnNetRecv(ClientSocket* pClient) override ;
+
 private:
     SOCKET _sock;
     //消息处理对象，内部创建线程
@@ -306,9 +327,11 @@ private:
     CELLTimeStamp _tTime;
 
 protected:
-    std::atomic_int _recvCount{};
+    std::atomic_int _msgCount{};
     //客户端进入计数
     std::atomic_int _clientCount{};
+
+    std::atomic_int _recvCount{};
 
 };
 
@@ -443,8 +466,10 @@ bool EasyTCPServer::IsRun() {
 void EasyTCPServer::time4msg() {
     auto t1 = _tTime.getElapsedSecond();
     if (t1 >= 1.0) {
-        printf("thread<%lu>, time<%lf>, socket<%d>, clients<%d>, recvCount<%f>\n",_cellServer.size(), t1, _sock, (int)_clientCount, _recvCount/t1);
+        printf("thread<%lu>, time<%lf>, socket<%d>, clients<%d>, recvCount<%d>, msgCount<%d>\n",
+                _cellServer.size(), t1, _sock, (int)_clientCount, (int)(_recvCount / t1), (int)(_msgCount/t1));
         _tTime.update();
+        _msgCount = 0;
         _recvCount = 0;
     }
 
@@ -461,17 +486,52 @@ void EasyTCPServer::Start(int threadCount) {
         ser->Start();
     }
 }
+
 //cellServer 4 多个线程触发 不安全
 void EasyTCPServer::OnLeave(ClientSocket* pClient) {
     _clientCount--;
 }
 //cellServer 4 多个线程触发 不安全
 void EasyTCPServer::OnNetMsg(ClientSocket* clientSock, DataHeader *header) {
-    _recvCount++;
+    _msgCount++;
+    switch (header->cmd) {
+        case CMD_LOGIN:
+        {
+            Login* login = (Login *)header;
+            //printf("收到<Socket = %3d>请求：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
+            //       clientSock, login->dataLength, login->userName, login->passWord);
+            //忽略判断用户名和密码
+            //LoginResult ret;
+            //clientSock->SendData(&ret);
+        }
+            break;
+        case CMD_LOGOUT:
+        {
+            LogOut* loginOut = (LogOut *)header;
+            //printf("收到<Socket = %3d>请求：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
+            //       clientSock ,loginOut->dataLength, loginOut->userName);
+            //忽略判断用户名和密码
+            //LoginOutResult ret;
+            //clientSock->SendData(&ret);
+        }
+            break;
+        default:
+        {
+            printf("收到<socket = %3d>未定义的消息，数据长度为: %d\n", clientSock->GetSock(), header->dataLength);
+            header->cmd = CMD_ERROR;
+            header->dataLength = 0;
+            //clientSock->SendData(header);
+        }
+            break;
+    }
 }
 //只会被主线程触发 安全
 void EasyTCPServer::OnJoin(ClientSocket *clientSocket) {
     _clientCount++;
+}
+
+void EasyTCPServer::OnNetRecv(ClientSocket *pClient) {
+    _recvCount++;
 }
 
 
