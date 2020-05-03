@@ -83,9 +83,9 @@ private:
     SOCKET _sockFd;
     //以下解决粘包和拆分包需要的变量
     //接收缓冲区
-    static const int RECV_BUFF_SIZE = 10240;
+    static const int RECV_BUFF_SIZE = 10240 * 10;
     //第二缓冲区  消息缓冲区
-    char _szMsgBuf[RECV_BUFF_SIZE*10] = {};
+    char _szMsgBuf[RECV_BUFF_SIZE] = {};
     int _lastPos;                        //指向缓冲区有数据的末尾位置
 
     //发送缓冲区
@@ -262,15 +262,25 @@ void CellServer::Close() {
 }
 
 int CellServer::RecvData(ClientSocket* clientSock) {
-    int nLen = (int)recv(clientSock->GetSock(), _szRecv, RECV_BUFF_SIZE, 0);
+//    int nLen = (int)recv(clientSock->GetSock(), _szRecv, RECV_BUFF_SIZE, 0);
+//    _pNetEvent->OnNetRecv(clientSock);
+//    if (nLen <= 0) {
+//        //printf("客户端<Socket = %d>退出, 任务结束\n", clientSock->GetSock());
+//        return -1;
+//    }
+//    //将收取到的数据拷贝到消息缓冲区
+//    memcpy(clientSock->GetMsg() + clientSock->GetPos(), _szRecv, nLen);
+//    clientSock->SetPos(clientSock->GetPos()+nLen);
+
+    //取消第一缓冲区，即取消水舀子，留下水缸
+    char* szRecv = clientSock->GetMsg() + clientSock->GetPos();
+    int nLen = (int)recv(clientSock->GetSock(), szRecv, RECV_BUFF_SIZE - clientSock->GetPos(), 0);
     _pNetEvent->OnNetRecv(clientSock);
     if (nLen <= 0) {
         //printf("客户端<Socket = %d>退出, 任务结束\n", clientSock->GetSock());
         return -1;
     }
-    //将收取到的数据拷贝到消息缓冲区
-    memcpy(clientSock->GetMsg() + clientSock->GetPos(), _szRecv, nLen);
-    clientSock->SetPos(clientSock->GetPos()+nLen);
+    clientSock->SetPos(clientSock->GetPos() + nLen);
     //判断收到消息的长度是否大于消息头的长度，若大于消息头的长度，就可以取出消息体的长度
     while (clientSock->GetPos() >= sizeof(DataHeader)) {
         auto *header = (DataHeader*)clientSock->GetMsg();
