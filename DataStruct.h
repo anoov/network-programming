@@ -2,12 +2,6 @@
 // Created by 孙卓文 on 2020/4/17.
 //
 
-#ifndef EASYTCPSERVER_DATASTRUCT_H
-#define EASYTCPSERVER_DATASTRUCT_H
-//
-// Created by 孙卓文 on 2020/4/17.
-//
-
 #ifndef EASYTCPCLIENT_DATASTRUCT_H
 #define EASYTCPCLIENT_DATASTRUCT_H
 enum CMD
@@ -34,6 +28,7 @@ struct Login: public DataHeader
     }
     char userName[32];
     char passWord[32];
+    char data[32];
 };
 struct LoginResult: public DataHeader
 {
@@ -43,6 +38,7 @@ struct LoginResult: public DataHeader
         result = 1;
     }
     int result;
+    char data[92];
 };
 struct LogOut: public DataHeader
 {
@@ -72,5 +68,3 @@ struct NewUserJoin : public DataHeader
     int scok;
 };
 #endif //EASYTCPCLIENT_DATASTRUCT_H
-
-#endif //EASYTCPSERVER_DATASTRUCT_H
