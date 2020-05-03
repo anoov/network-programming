@@ -28,6 +28,7 @@
 #include <functional>
 #include "DataStruct.h"
 #include "CELLTimestamp.h"
+#include "CELLTask.h"
 
 //客户端数据类型
 class ClientSocket
@@ -96,6 +97,7 @@ private:
 
 };
 
+class CellServer;
 //网络事件接口
 class INETEvent
 {
@@ -103,7 +105,7 @@ public:
     //客户端离开事件
     virtual void OnLeave(ClientSocket* pClient) = 0;
     //客户端消息事件
-    virtual void OnNetMsg(ClientSocket* clientSock, DataHeader* header) = 0;
+    virtual void OnNetMsg(CellServer* pCellServer, ClientSocket* clientSock, DataHeader* header) = 0;
     //客户端加入时间
     virtual void OnJoin(ClientSocket* clientSocket) = 0;
     //recv事件
@@ -112,6 +114,26 @@ public:
 private:
 };
 
+
+//网络消息发送任务
+class CellSendMsg2ClientTask : public CellTask
+{
+public:
+    CellSendMsg2ClientTask(ClientSocket* c, DataHeader* h): _pClient(c), _pHeader(h){}
+    //virtual ~CellSendMsg2ClientTask();
+
+    int doTask() override {
+        int ret = _pClient->SendData(_pHeader);
+        delete _pHeader;
+        return ret;
+    }
+private:
+    ClientSocket* _pClient;
+    DataHeader* _pHeader;
+};
+
+
+//网络消息接收处理服务类
 class CellServer
 {
 public:
@@ -148,6 +170,11 @@ public:
         _pNetEvent = event;
     }
 
+    void addSendTask(ClientSocket* pClient, DataHeader* data) {
+        auto* task = new CellSendMsg2ClientTask(pClient, data);
+        _taskServer.addTask(task);
+    }
+
 private:
     SOCKET _sock;
     //正式客户队列
@@ -169,6 +196,9 @@ private:
     //客户列表是否有变化
     bool _clients_change;
     SOCKET _maxSock;
+
+    //任务服务类型，
+    CellTaskServer _taskServer;
 
 };
 
@@ -304,7 +334,7 @@ int CellServer::RecvData(ClientSocket* clientSock) {
 }
 
 void CellServer::OnNetMsg(ClientSocket* clientSock, DataHeader *header) {
-    _pNetEvent->OnNetMsg(clientSock, header);
+    _pNetEvent->OnNetMsg(this, clientSock, header);
 }
 
 void CellServer::AddClient(ClientSocket* pClient) {
@@ -314,11 +344,12 @@ void CellServer::AddClient(ClientSocket* pClient) {
 
 void CellServer::Start() {
     _pThread = std::shared_ptr<std::thread>(new std::thread(std::mem_fn(&CellServer::OnRun), this));
+    _taskServer.Start(); //启动消息发送线程
     //_pThread->detach();
 }
 
 
-
+//接收客户端服务
 class EasyTCPServer : public INETEvent
 {
 public:
@@ -354,7 +385,7 @@ public:
 
     void OnLeave(ClientSocket* pClient) override;
 
-    void OnNetMsg(ClientSocket* clientSock, DataHeader* header) override ;
+    void OnNetMsg(CellServer* pCellServer, ClientSocket* clientSock, DataHeader* header) override ;
 
     void OnJoin(ClientSocket* clientSocket) override ;
 
@@ -524,7 +555,7 @@ void EasyTCPServer::Start(int threadCount) {
         _cellServer.push_back(ser);
         //注册网络事件接收对象
         ser->SetNetEvent(this);
-        //启动消息处理线程
+        //启动消息接收处理线程
         ser->Start();
     }
 }
@@ -534,38 +565,38 @@ void EasyTCPServer::OnLeave(ClientSocket* pClient) {
     _clientCount--;
 }
 //cellServer 4 多个线程触发 不安全
-void EasyTCPServer::OnNetMsg(ClientSocket* clientSock, DataHeader *header) {
+void EasyTCPServer::OnNetMsg(CellServer* pCellServer, ClientSocket* clientSock, DataHeader *header) {
     _msgCount++;
-    switch (header->cmd) {
-        case CMD_LOGIN:
-        {
-            Login* login = (Login *)header;
-            //printf("收到<Socket = %3d>请求：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
-            //       clientSock, login->dataLength, login->userName, login->passWord);
-            //忽略判断用户名和密码
-            //LoginResult ret;
-            //clientSock->SendData(&ret);
-        }
-            break;
-        case CMD_LOGOUT:
-        {
-            LogOut* loginOut = (LogOut *)header;
-            //printf("收到<Socket = %3d>请求：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
-            //       clientSock ,loginOut->dataLength, loginOut->userName);
-            //忽略判断用户名和密码
-            //LoginOutResult ret;
-            //clientSock->SendData(&ret);
-        }
-            break;
-        default:
-        {
-            printf("收到<socket = %3d>未定义的消息，数据长度为: %d\n", clientSock->GetSock(), header->dataLength);
-            header->cmd = CMD_ERROR;
-            header->dataLength = 0;
-            //clientSock->SendData(header);
-        }
-            break;
-    }
+//    switch (header->cmd) {
+//        case CMD_LOGIN:
+//        {
+//            Login* login = (Login *)header;
+//            //printf("收到<Socket = %3d>请求：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
+//            //       clientSock, login->dataLength, login->userName, login->passWord);
+//            //忽略判断用户名和密码
+//            LoginResult ret;
+//            clientSock->SendData(&ret);
+//        }
+//            break;
+//        case CMD_LOGOUT:
+//        {
+//            LogOut* loginOut = (LogOut *)header;
+//            //printf("收到<Socket = %3d>请求：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
+//            //       clientSock ,loginOut->dataLength, loginOut->userName);
+//            //忽略判断用户名和密码
+//            LoginOutResult ret;
+//            clientSock->SendData(&ret);
+//        }
+//            break;
+//        default:
+//        {
+//            printf("收到<socket = %3d>未定义的消息，数据长度为: %d\n", clientSock->GetSock(), header->dataLength);
+//            header->cmd = CMD_ERROR;
+//            header->dataLength = 0;
+//            clientSock->SendData(header);
+//        }
+//            break;
+//    }
 }
 //只会被主线程触发 安全
 void EasyTCPServer::OnJoin(ClientSocket *clientSocket) {
