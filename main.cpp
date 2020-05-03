@@ -1,7 +1,4 @@
 #include <iostream>
-//#include "myServer.cpp"
-//#include "server.cpp"
-//#include "tmp.h"
 #include "EasyTCPServer.h"
 #include <thread>
 bool g_bRun = true;
@@ -28,12 +25,20 @@ class MyServer : public EasyTCPServer
 public:
     //cellServer 4 多个线程触发 不安全
     void OnLeave(ClientSocket* pClient) override {
-        _clientCount--;
-        std::cout << "客户端离开: " << pClient->GetSock()  << std::endl;
+        EasyTCPServer::OnLeave(pClient);
+        //std::cout << "客户端离开: " << pClient->GetSock()  << std::endl;
+    }
+    //只会被主线程触发 安全
+    void OnJoin(ClientSocket *clientSocket) override {
+        EasyTCPServer::OnJoin(clientSocket);
+        //std::cout << "客户端加入: " << clientSocket->GetSock()  << std::endl;
+    }
+    void OnNetRecv(ClientSocket* pClient) override {
+        EasyTCPServer::OnNetRecv(pClient);
     }
     //cellServer 4 多个线程触发 不安全
-    void OnNetMsg(ClientSocket* clientSock, DataHeader *header) override {
-        _recvCount++;
+    void OnNetMsg(CellServer* pCellServer, ClientSocket* clientSock, DataHeader *header) override {
+        EasyTCPServer::OnNetMsg(pCellServer, clientSock, header);
         switch (header->cmd) {
             case CMD_LOGIN:
             {
@@ -41,8 +46,9 @@ public:
                 //printf("收到<Socket = %3d>请求：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
                 //       clientSock, login->dataLength, login->userName, login->passWord);
                 //忽略判断用户名和密码
-                LoginResult ret;
-                clientSock->SendData(&ret);
+                auto* ret = new LoginResult();
+                //clientSock->SendData(&ret);
+                pCellServer->addSendTask(clientSock, ret);
             }
                 break;
             case CMD_LOGOUT:
@@ -51,8 +57,9 @@ public:
                 //printf("收到<Socket = %3d>请求：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
                 //       clientSock ,loginOut->dataLength, loginOut->userName);
                 //忽略判断用户名和密码
-                LoginOutResult ret;
-                clientSock->SendData(&ret);
+                auto* ret = new LoginOutResult();
+                //clientSock->SendData(&ret);
+                pCellServer->addSendTask(clientSock, ret);
             }
                 break;
             default:
@@ -60,22 +67,19 @@ public:
                 printf("收到<socket = %3d>未定义的消息，数据长度为: %d\n", clientSock->GetSock(), header->dataLength);
                 header->cmd = CMD_ERROR;
                 header->dataLength = 0;
-                clientSock->SendData(header);
+                //clientSock->SendData(header);
+                //pCellServer->addSendTask(clientSock, header);
             }
                 break;
         }
-    }
-    //只会被主线程触发 安全
-    void OnJoin(ClientSocket *clientSocket) override {
-        _clientCount++;
-        std::cout << "客户端加入: " << clientSocket->GetSock()  << std::endl;
     }
 };
 
 int main() {
     MyServer server;
     server.InitSocket();
-    server.Bind("10.211.55.4", 4567);
+//    server.Bind("10.211.55.4", 4567);
+    server.Bind("127.0.0.1", 4567);
     server.Listen(50);
 
     //启动消费者模型
