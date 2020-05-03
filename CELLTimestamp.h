@@ -14,7 +14,6 @@ public:
     CELLTimeStamp() {
         update();
     }
-    ~CELLTimeStamp(){}
     void update() {
         _begin = high_resolution_clock::now();
     }
