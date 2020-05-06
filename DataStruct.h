@@ -11,6 +11,8 @@ enum CMD
     CMD_LOGOUT,
     CMD_LOGOUT_RESULT,
     CMD_NEW_USER_JOIN,
+    CMD_c2s_HEART,
+    CMD_s2c_HEART,
     CMD_ERROR
 };
 
@@ -66,5 +68,21 @@ struct NewUserJoin : public DataHeader
         scok = 0;
     }
     int scok;
+};
+
+struct Heart_c2s_Test: public DataHeader
+{
+    Heart_c2s_Test(){
+        dataLength = sizeof(Heart_c2s_Test);
+        cmd = CMD_c2s_HEART;
+    }
+};
+
+struct Heart_s2c_Test: public DataHeader
+{
+    Heart_s2c_Test(){
+        dataLength = sizeof(Heart_s2c_Test);
+        cmd = CMD_s2c_HEART;
+    }
 };
 #endif //EASYTCPCLIENT_DATASTRUCT_H

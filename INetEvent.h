@@ -13,13 +13,13 @@ class INETEvent
 {
 public:
     //客户端离开事件
-    virtual void OnLeave(CELLClient* pClient) = 0;
+    virtual void OnLeave(CELLClientPtr pClient) = 0;
     //客户端消息事件
-    virtual void OnNetMsg(CELLServer* pCellServer, CELLClient* clientSock, DataHeader* header) = 0;
+    virtual void OnNetMsg(CELLServer* pCellServer, CELLClientPtr clientSock, DataHeader* header) = 0;
     //客户端加入时间
-    virtual void OnJoin(CELLClient* CellClient) = 0;
+    virtual void OnJoin(CELLClientPtr CellClient) = 0;
     //recv事件
-    virtual void OnNetRecv(CELLClient* pClient) = 0;
+    virtual void OnNetRecv(CELLClientPtr pClient) = 0;
 
 private:
 };

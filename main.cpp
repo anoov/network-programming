@@ -24,20 +24,20 @@ class MyServer : public EasyTCPServer
 {
 public:
     //cellServer 4 多个线程触发 不安全
-    void OnLeave(CELLClient* pClient) override {
+    void OnLeave(CELLClientPtr pClient) override {
         EasyTCPServer::OnLeave(pClient);
         //std::cout << "客户端离开: " << pClient->GetSock()  << std::endl;
     }
     //只会被主线程触发 安全
-    void OnJoin(CELLClient *clientSocket) override {
+    void OnJoin(CELLClientPtr clientSocket) override {
         EasyTCPServer::OnJoin(clientSocket);
         //std::cout << "客户端加入: " << clientSocket->GetSock()  << std::endl;
     }
-    void OnNetRecv(CELLClient* pClient) override {
+    void OnNetRecv(CELLClientPtr pClient) override {
         EasyTCPServer::OnNetRecv(pClient);
     }
     //cellServer 4 多个线程触发 不安全
-    void OnNetMsg(CELLServer* pCellServer, CELLClient* clientSock, DataHeader *header) override {
+    void OnNetMsg(CELLServer* pCellServer, CELLClientPtr clientSock, DataHeader *header) override {
         EasyTCPServer::OnNetMsg(pCellServer, clientSock, header);
         switch (header->cmd) {
             case CMD_LOGIN:
@@ -46,9 +46,11 @@ public:
                 //printf("收到<Socket = %3d>请求：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
                 //       clientSock, login->dataLength, login->userName, login->passWord);
                 //忽略判断用户名和密码
-                auto* ret = new LoginResult();
-                //clientSock->SendData(&ret);
-                pCellServer->addSendTask(clientSock, ret);
+                LoginResult ret;
+                clientSock->SendData(&ret);
+                ////使用收发分离
+                //auto* ret = new LoginResult();
+                //pCellServer->addSendTask(clientSock, ret);
             }
                 break;
             case CMD_LOGOUT:
@@ -60,6 +62,15 @@ public:
                 auto* ret = new LoginOutResult();
                 //clientSock->SendData(&ret);
                 pCellServer->addSendTask(clientSock, ret);
+            }
+                break;
+
+            case CMD_c2s_HEART:
+            {
+                //有收到心跳数据就重置心跳，说明该客户还活着
+                clientSock->resetDrHeart();
+                Heart_s2c_Test ret;
+                clientSock->SendData(&ret);
             }
                 break;
             default:

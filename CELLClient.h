@@ -7,6 +7,8 @@
 
 #include "CELLPublicHeader.h"
 
+//客户端心跳检测死亡计时时间
+#define CLIENT_HEART_DEAD_TIME 5000
 //客户端数据类型
 class CELLClient
 {
@@ -57,6 +59,21 @@ public:
         }
         return ret;
     }
+
+    void resetDrHeart() {
+        _dtHeart = 0;
+    }
+
+    bool checkHeart(time_t dt) {
+        _dtHeart += dt;
+        if (_dtHeart >= CLIENT_HEART_DEAD_TIME) {
+            //printf("checkHeart dead=%d, time=%ld\n", _sockFd, _dtHeart);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
 private:
     SOCKET _sockFd;
     //以下解决粘包和拆分包需要的变量
@@ -71,6 +88,10 @@ private:
     char _szSendBuf[SEND_BUFF_SIZE] = {};
     int _lastSendPos;                        //指向缓冲区有数据的末尾位置
 
+    //心跳死亡计时
+    time_t _dtHeart;
+
 
 };
+using CELLClientPtr = std::shared_ptr<CELLClient>;
 #endif //EASYTCPSERVER_CELLCLIENT_H

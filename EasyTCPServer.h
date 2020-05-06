@@ -52,15 +52,15 @@ public:
     //计算并输出每秒收到的网络消息
     void time4msg();
 
-    void addClientToCellServer(CELLClient* pClient);
+    void addClientToCellServer(CELLClientPtr pClient);
 
-    void OnLeave(CELLClient* pClient) override;
+    void OnLeave(CELLClientPtr pClient) override;
 
-    void OnNetMsg(CELLServer* pCellServer, CELLClient* clientSock, DataHeader* header) override ;
+    void OnNetMsg(CELLServer* pCellServer, CELLClientPtr clientSock, DataHeader* header) override ;
 
-    void OnJoin(CELLClient* CellClient) override ;
+    void OnJoin(CELLClientPtr CellClient) override ;
 
-    void OnNetRecv(CELLClient* pClient) override ;
+    void OnNetRecv(CELLClientPtr pClient) override ;
 
 private:
     SOCKET _sock;
@@ -140,12 +140,13 @@ SOCKET EasyTCPServer::Accept() {
         printf("<Socket=%d>接受客户连接失败...\n", _sock);
     } else {
         //将新加入来的客户加入到队列中
-        addClientToCellServer(new CELLClient(clientSock));
+        auto newClient = std::make_shared<CELLClient>(clientSock);
+        addClientToCellServer(newClient);
     }
     return clientSock;
 }
 
-void EasyTCPServer::addClientToCellServer(CELLClient* pClient) {
+void EasyTCPServer::addClientToCellServer(CELLClientPtr pClient) {
 
     //查找消费者中队列size最小的，将新客户加入
     auto pMinServer = _cellServer[0];
@@ -232,11 +233,11 @@ void EasyTCPServer::Start(int threadCount) {
 }
 
 //cellServer 4 多个线程触发 不安全
-void EasyTCPServer::OnLeave(CELLClient* pClient) {
+void EasyTCPServer::OnLeave(CELLClientPtr pClient) {
     _clientCount--;
 }
 //cellServer 4 多个线程触发 不安全
-void EasyTCPServer::OnNetMsg(CELLServer* pCellServer, CELLClient* clientSock, DataHeader *header) {
+void EasyTCPServer::OnNetMsg(CELLServer* pCellServer, CELLClientPtr clientSock, DataHeader *header) {
     _msgCount++;
 //    switch (header->cmd) {
 //        case CMD_LOGIN:
@@ -270,11 +271,11 @@ void EasyTCPServer::OnNetMsg(CELLServer* pCellServer, CELLClient* clientSock, Da
 //    }
 }
 //只会被主线程触发 安全
-void EasyTCPServer::OnJoin(CELLClient *CellClient) {
+void EasyTCPServer::OnJoin(CELLClientPtr CellClient) {
     _clientCount++;
 }
 
-void EasyTCPServer::OnNetRecv(CELLClient *pClient) {
+void EasyTCPServer::OnNetRecv(CELLClientPtr pClient) {
     _recvCount++;
 }
 

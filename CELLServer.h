@@ -32,11 +32,11 @@ public:
 
     void Close();
 
-    int RecvData(CELLClient* clientSock);
+    int RecvData(CELLClientPtr clientSock);
 
-    virtual void OnNetMsg(CELLClient* clientSock, DataHeader *header);
+    virtual void OnNetMsg(CELLClientPtr clientSock, DataHeader *header);
 
-    void AddClient(CELLClient* pClient);
+    void AddClient(CELLClientPtr pClient);
 
     void Start();
     //提供缓冲客户队列的大小
@@ -48,20 +48,42 @@ public:
         _pNetEvent = event;
     }
 
-    void addSendTask(CELLClient* pClient, DataHeader* data) {
+    void addSendTask(CELLClientPtr pClient, DataHeader* data) {
         //auto* task = new CellSendMsg2ClientTask(pClient, data);
         _taskServer.addTask([pClient, data] () {
             pClient->SendData(data);
-            delete data;
+            //delete data;
         });
+    }
+
+    time_t _oldTime = CELLTime::getNowInMilliSec();
+    void CheckTime() {
+        auto nowTime = CELLTime::getNowInMilliSec();
+        auto dt = nowTime - _oldTime;
+        _oldTime = nowTime;
+
+        for (auto iter = _clients.begin(); iter != _clients.end();) {
+            //如何死亡
+            if ((*iter)->checkHeart(dt)) {
+                if (_pNetEvent)
+                    _pNetEvent->OnLeave(*iter);
+                _clients_change = true;
+                //delete *iter;
+                close((*iter)->GetSock());
+                iter = _clients.erase(iter);
+            } else {
+                iter ++;
+            }
+        }
+
     }
 
 private:
     SOCKET _sock;
     //正式客户队列
-    std::vector<CELLClient*> _clients;
+    std::vector<CELLClientPtr> _clients;
     //缓冲客户队列 应用与生产者消费者模型
-    std::vector<CELLClient*> _clientsBuff;
+    std::vector<CELLClientPtr> _clientsBuff;
     std::mutex _mutex;
 
     static const int RECV_BUFF_SIZE = 10240;
@@ -99,6 +121,9 @@ bool CELLServer::OnRun() {
         if (_clients.empty()) {
             std::chrono::milliseconds t(1);
             std::this_thread::sleep_for(t);
+            //旧的时间戳
+            _oldTime = CELLTime::getNowInMilliSec();
+
             continue;
         }
         //伯克利 socket
@@ -121,12 +146,12 @@ bool CELLServer::OnRun() {
             memcpy(&fdRead, &_fdRead_back, sizeof(_fdRead_back));
         }
 
-        timeval t = {1, 0};
+        timeval t = {0, 1};
         //若最后一个参数设置为null，则程序会阻塞到select这里，一直等到有数据可处理
         //select监视三个集合中的所有描述符，在这里是套接字
         //例如select的第二个参数读集合，
         //若集合中的某一个socket有读操作，则保持该操作位，否则该操作位清零
-        int ret = select(_maxSock + 1, &fdRead, nullptr, nullptr, nullptr); //每个线程的任务只是查询消息，采用阻塞方式更好
+        int ret = select(_maxSock + 1, &fdRead, nullptr, nullptr, &t); //每个线程的任务只是查询消息，采用阻塞方式更好
 
         if (ret < 0) {
             printf("select发生错误, 任务结束\n");
@@ -137,6 +162,7 @@ bool CELLServer::OnRun() {
             continue;
         }
 
+        //接收数据
         for (int n = (int) _clients.size() - 1; n >= 0; n--) {
             //如何客户socket数组中有读组操作，则说明有消息进来
             if (FD_ISSET(_clients[n]->GetSock(), &fdRead)) {
@@ -146,12 +172,17 @@ bool CELLServer::OnRun() {
                         _clients_change = true;
                         if (_pNetEvent)
                             _pNetEvent->OnLeave(_clients[n]);
-                        delete _clients[n];
+                        //delete _clients[n];
+                        close((*iter)->GetSock());
                         _clients.erase(iter);
                     }
                 }
             }
         }
+
+        CheckTime();
+
+
     }
     return false ;
 }
@@ -162,9 +193,9 @@ bool CELLServer::IsRun() {
 
 void CELLServer::Close() {
     if (_sock != INVALID_SOCKET) {
-        for (auto&  _client : _clients) {
+        for (auto  _client : _clients) {
             close(_client->GetSock());
-            delete _client;
+            //delete _client;
         }
         close(_sock);
         _sock = INVALID_SOCKET;
@@ -172,7 +203,7 @@ void CELLServer::Close() {
     }
 }
 
-int CELLServer::RecvData(CELLClient* clientSock) {
+int CELLServer::RecvData(CELLClientPtr clientSock) {
 //    int nLen = (int)recv(clientSock->GetSock(), _szRecv, RECV_BUFF_SIZE, 0);
 //    _pNetEvent->OnNetRecv(clientSock);
 //    if (nLen <= 0) {
@@ -191,6 +222,8 @@ int CELLServer::RecvData(CELLClient* clientSock) {
         //printf("客户端<Socket = %d>退出, 任务结束\n", clientSock->GetSock());
         return -1;
     }
+
+
     clientSock->SetPos(clientSock->GetPos() + nLen);
     //判断收到消息的长度是否大于消息头的长度，若大于消息头的长度，就可以取出消息体的长度
     while (clientSock->GetPos() >= sizeof(DataHeader)) {
@@ -214,11 +247,11 @@ int CELLServer::RecvData(CELLClient* clientSock) {
 
 }
 
-void CELLServer::OnNetMsg(CELLClient* clientSock, DataHeader *header) {
+void CELLServer::OnNetMsg(CELLClientPtr clientSock, DataHeader *header) {
     _pNetEvent->OnNetMsg(this, clientSock, header);
 }
 
-void CELLServer::AddClient(CELLClient* pClient) {
+void CELLServer::AddClient(CELLClientPtr pClient) {
     std::lock_guard<std::mutex> lock(_mutex);
     _clientsBuff.push_back(pClient);
 }
