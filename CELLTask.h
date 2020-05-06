@@ -8,6 +8,7 @@
 #include <thread>
 #include <mutex>
 #include <list>
+#include <functional>
 //任务类型-基类
 class CellTask
 {

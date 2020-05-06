@@ -24,20 +24,20 @@ class MyServer : public EasyTCPServer
 {
 public:
     //cellServer 4 多个线程触发 不安全
-    void OnLeave(ClientSocket* pClient) override {
+    void OnLeave(CELLClient* pClient) override {
         EasyTCPServer::OnLeave(pClient);
         //std::cout << "客户端离开: " << pClient->GetSock()  << std::endl;
     }
     //只会被主线程触发 安全
-    void OnJoin(ClientSocket *clientSocket) override {
+    void OnJoin(CELLClient *clientSocket) override {
         EasyTCPServer::OnJoin(clientSocket);
         //std::cout << "客户端加入: " << clientSocket->GetSock()  << std::endl;
     }
-    void OnNetRecv(ClientSocket* pClient) override {
+    void OnNetRecv(CELLClient* pClient) override {
         EasyTCPServer::OnNetRecv(pClient);
     }
     //cellServer 4 多个线程触发 不安全
-    void OnNetMsg(CellServer* pCellServer, ClientSocket* clientSock, DataHeader *header) override {
+    void OnNetMsg(CELLServer* pCellServer, CELLClient* clientSock, DataHeader *header) override {
         EasyTCPServer::OnNetMsg(pCellServer, clientSock, header);
         switch (header->cmd) {
             case CMD_LOGIN:
