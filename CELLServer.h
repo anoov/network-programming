@@ -10,22 +10,6 @@
 #include "INetEvent.h"
 #include "CELLClient.h"
 
-//网络消息发送任务
-class CellSendMsg2ClientTask : public CellTask
-{
-public:
-    CellSendMsg2ClientTask(CELLClient* c, DataHeader* h): _pClient(c), _pHeader(h){}
-    //virtual ~CellSendMsg2ClientTask();
-
-    int doTask() override {
-        int ret = _pClient->SendData(_pHeader);
-        delete _pHeader;
-        return ret;
-    }
-private:
-    CELLClient* _pClient;
-    DataHeader* _pHeader;
-};
 
 //网络消息接收处理服务类
 class CELLServer
@@ -65,8 +49,11 @@ public:
     }
 
     void addSendTask(CELLClient* pClient, DataHeader* data) {
-        auto* task = new CellSendMsg2ClientTask(pClient, data);
-        _taskServer.addTask(task);
+        //auto* task = new CellSendMsg2ClientTask(pClient, data);
+        _taskServer.addTask([pClient, data] () {
+            pClient->SendData(data);
+            delete data;
+        });
     }
 
 private:

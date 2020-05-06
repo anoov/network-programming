@@ -9,27 +9,29 @@
 #include <mutex>
 #include <list>
 #include <functional>
-//任务类型-基类
-class CellTask
-{
-public:
-    CellTask() = default;
-    virtual ~CellTask() = default;
-    //执行任务
-    virtual int doTask() = 0;
 
-private:
-
-};
+////任务类型-基类
+//class CellTask
+//{
+//public:
+//    CellTask() = default;
+//    virtual ~CellTask() = default;
+//    //执行任务
+//    virtual int doTask() = 0;
+//
+//private:
+//
+//};
 
 //执行任务的服务类型
 class CellTaskServer
 {
+    using CellTask = std::function<void()>;
 public:
     CellTaskServer() = default;
     ~CellTaskServer() = default;
     //添加任务
-    void addTask(CellTask* task);
+    void addTask(CellTask task);
     //启动服务
     void Start();
 
@@ -39,14 +41,14 @@ private:
 
 private:
     //真实任务数据
-    std::list<CellTask*> _tasks;
+    std::list<CellTask> _tasks;
     //任务数据缓冲区
-    std::list<CellTask*> _tasksBuf;
+    std::list<CellTask> _tasksBuf;
     //改变数据缓冲区时需要加锁
     std::mutex _mutex;
 };
 
-void CellTaskServer::addTask(CellTask* task) {
+void CellTaskServer::addTask(CellTask task) {
     std::lock_guard<std::mutex> lock(_mutex);
     _tasksBuf.push_back(task);
 }
@@ -75,8 +77,8 @@ void CellTaskServer::OnRun() {
         //如果有任务，处理任务
         else {
             for (auto& pTask : _tasks) {
-                pTask->doTask();
-                delete pTask;
+                pTask();
+                //delete pTask;
             }
             _tasks.clear();
         }
