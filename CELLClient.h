@@ -61,13 +61,13 @@ private:
     SOCKET _sockFd;
     //以下解决粘包和拆分包需要的变量
     //接收缓冲区
-    static const int RECV_BUFF_SIZE = 10240 * 10;
+    static const int RECV_BUFF_SIZE = 10240;
     //第二缓冲区  消息缓冲区
     char _szMsgBuf[RECV_BUFF_SIZE] = {};
     int _lastPos;                        //指向缓冲区有数据的末尾位置
 
     //发送缓冲区
-    static const int SEND_BUFF_SIZE = 10240 * 10;
+    static const int SEND_BUFF_SIZE = 10240;
     char _szSendBuf[SEND_BUFF_SIZE] = {};
     int _lastSendPos;                        //指向缓冲区有数据的末尾位置
 
