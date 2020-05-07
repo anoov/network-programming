@@ -63,7 +63,7 @@ public:
         _oldTime = nowTime;
 
         for (auto iter = _clients.begin(); iter != _clients.end();) {
-            //如何死亡
+            //心跳检测
             if ((*iter)->checkHeart(dt)) {
                 if (_pNetEvent)
                     _pNetEvent->OnLeave(*iter);
@@ -71,9 +71,12 @@ public:
                 //delete *iter;
                 close((*iter)->GetSock());
                 iter = _clients.erase(iter);
-            } else {
-                iter ++;
+                continue;
             }
+            //定时发送检测
+            (*iter)->checkSend(dt);
+            iter ++;
+
         }
 
     }

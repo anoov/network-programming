@@ -7,8 +7,11 @@
 
 #include "CELLPublicHeader.h"
 
-//客户端心跳检测死亡计时时间
-#define CLIENT_HEART_DEAD_TIME 5000
+//客户端心跳检测死亡计时时间 毫秒
+#define CLIENT_HEART_DEAD_TIME 60000
+//定时发送时间,指定时间内发送缓冲区的消息
+#define CLIENT_SEND_BUFF_TIME 500
+
 //客户端数据类型
 class CELLClient
 {
@@ -19,6 +22,9 @@ public:
         memset(_szSendBuf, 0, sizeof(_szSendBuf));
         _lastPos = 0;
         _lastSendPos = 0;
+
+        resetDTHeart();
+        resetDTSend();
     }
     SOCKET GetSock() {return _sockFd;}
     char *GetMsg() {return _szMsgBuf;}
@@ -46,6 +52,8 @@ public:
                 ret = send(_sockFd, _szSendBuf, SEND_BUFF_SIZE, 0);
                 //数据尾部指针清零
                 _lastSendPos = 0;
+                //重置发送时间
+                resetDTSend();
                 //如何发生错误
                 if (SOCKET_ERROR == ret) {
                     return ret;
@@ -60,14 +68,48 @@ public:
         return ret;
     }
 
-    void resetDrHeart() {
+    //立即发送数据
+    int SendDataNow() {
+        int ret = SOCKET_ERROR;
+        //确保缓冲区有数据
+        if (_lastSendPos > 0 && SOCKET_ERROR != _sockFd) {
+            //发送数据
+            ret = send(_sockFd, _szSendBuf, _lastSendPos, 0);
+            //数据尾部位置清零
+            _lastSendPos = 0;
+            resetDTSend();
+        }
+        return ret;
+    }
+
+    void resetDTHeart() {
         _dtHeart = 0;
     }
 
+    //心跳检测
     bool checkHeart(time_t dt) {
         _dtHeart += dt;
         if (_dtHeart >= CLIENT_HEART_DEAD_TIME) {
-            //printf("checkHeart dead=%d, time=%ld\n", _sockFd, _dtHeart);
+            printf("checkHeart dead=%d, time=%ld\n", _sockFd, _dtHeart);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    void resetDTSend() {
+        _dtSend = 0;
+    }
+
+    //定时发送消息检测
+    bool checkSend(time_t dt) {
+        _dtSend += dt;
+        if (_dtSend >= CLIENT_SEND_BUFF_TIME) {
+            printf("checkSend s=%d, time=%ld\n", _sockFd, _dtSend);
+            //立即发送缓冲区中的数据
+            SendDataNow();
+            //重置发送计时
+            resetDTSend();
             return true;
         } else {
             return false;
@@ -90,6 +132,9 @@ private:
 
     //心跳死亡计时
     time_t _dtHeart;
+
+    //上次发送消息数据的时间
+    time_t _dtSend;
 
 
 };

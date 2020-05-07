@@ -42,6 +42,8 @@ public:
         switch (header->cmd) {
             case CMD_LOGIN:
             {
+                //收到登录消息也心跳了一次
+                clientSock->resetDTHeart();
                 Login* login = (Login *)header;
                 //printf("收到<Socket = %3d>请求：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
                 //       clientSock, login->dataLength, login->userName, login->passWord);
@@ -68,7 +70,7 @@ public:
             case CMD_c2s_HEART:
             {
                 //有收到心跳数据就重置心跳，说明该客户还活着
-                clientSock->resetDrHeart();
+                clientSock->resetDTHeart();
                 Heart_s2c_Test ret;
                 clientSock->SendData(&ret);
             }
