@@ -16,7 +16,7 @@
 #include <algorithm>
 #include "CELLServer.h"
 #include "CELLClient.h"
-
+#include "CELLThread.h"
 #include "INetEvent.h"
 
 
@@ -47,12 +47,6 @@ public:
     void Start(int threadCount = 1);
     //关闭socket
     void Close();
-    //处理网络消息
-    bool OnRun();
-    //是否工作中
-    bool IsRun();
-    //计算并输出每秒收到的网络消息
-    void time4msg();
 
     void addClientToCellServer(CELLClientPtr pClient);
 
@@ -65,12 +59,19 @@ public:
     void OnNetRecv(CELLClientPtr pClient) override ;
 
 private:
+    //处理网络消息
+    bool OnRun(CELLThread* pThread);
+    //计算并输出每秒收到的网络消息
+    void time4msg();
+private:
     SOCKET _sock;
     //消息处理对象，内部创建线程
     std::vector<CELLServer*> _cellServer;
 
     //每秒消息计时
     CELLTimeStamp _tTime;
+
+    CELLThread _thread;
 
 protected:
     std::atomic_int _msgCount{};
@@ -125,6 +126,7 @@ int EasyTCPServer::Listen(int n) {
 
 void EasyTCPServer::Close() {
     printf("EasyTCPServer close start\n");
+    _thread.Close();
     if (_sock != INVALID_SOCKET) {
         for (auto s : _cellServer) {
             delete s;
@@ -167,8 +169,8 @@ void EasyTCPServer::addClientToCellServer(CELLClientPtr pClient) {
     OnJoin(pClient);
 }
 
-bool EasyTCPServer::OnRun() {
-    if (IsRun()) {
+bool EasyTCPServer::OnRun(CELLThread* pThread) {
+    while (pThread->isRun()) {
         time4msg();
         //伯克利 socket
         //第一个参数：集合中所有描述符的范围而不是数量，集合中最大值加一
@@ -195,9 +197,10 @@ bool EasyTCPServer::OnRun() {
         int ret = select(_sock + 1, &fdRead, nullptr, nullptr, &t);
 
         if (ret < 0) {
-            printf("select发生错误, 任务结束\n");
-            Close();
-            return false;
+            printf("EasyTCPServer<%d>.Accept select发生错误, 任务结束\n", _sock);
+            //Close();
+            pThread->Exit();
+            break;
         }
 
         //若本socket有读操作，意味着有客户机连进来
@@ -206,20 +209,17 @@ bool EasyTCPServer::OnRun() {
 
             //4 accept 等待接受客户连接
             Accept();
-            return true;
+            //return true;
         }
-        return true;
+        //return true;
     }
     return false ;
-}
-
-bool EasyTCPServer::IsRun() {
-    return _sock != INVALID_SOCKET;
 }
 
 void EasyTCPServer::time4msg() {
     auto t1 = _tTime.getElapsedSecond();
     if (t1 >= 1.0) {
+
         printf("thread<%lu>, time<%lf>, socket<%d>, clients<%d>, recvCount<%d>, msgCount<%d>\n",
                 _cellServer.size(), t1, _sock, (int)_clientCount, (int)(_recvCount / t1), (int)(_msgCount/t1));
         _tTime.update();
@@ -238,6 +238,11 @@ void EasyTCPServer::Start(int threadCount) {
         //启动消息接收处理线程
         ser->Start();
     }
+
+    _thread.Start(nullptr,
+                  [this](CELLThread* pThread){OnRun(pThread);},
+                  nullptr);
+
 }
 
 //cellServer 4 多个线程触发 不安全
@@ -289,4 +294,3 @@ void EasyTCPServer::OnNetRecv(CELLClientPtr pClient) {
 
 
 #endif //EASYTCPSERVER_EASYTCPSERVER_H
-

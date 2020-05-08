@@ -98,13 +98,23 @@ int main() {
     //启动消费者模型
     server.Start(4);
 
-    //启动线程函数
-    std::thread t1(cmdThread);
-    t1.detach();
-    while (g_bRun) {
-        server.OnRun();
+
+    //在主线程中等待用户输入命令
+    while (true) {
+        // 3 输入请求命令
+        char sendBuf[256] = {};
+        //printf("请输入命令：");
+        scanf("%s", sendBuf);
+
+        // 4 处理请求
+        if (0 == strcmp(sendBuf, "exit")) {
+            server.Close();
+            printf("退出cmdThread线程！\n");
+            break;
+        } else {
+            printf("收到不支持的命令，请重新输入！\n");
+        }
     }
-    server.Close();
 
 
 //    CELLServer task(1, 1);

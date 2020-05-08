@@ -10,19 +10,8 @@
 #include <list>
 #include <functional>
 #include "CELLSemaphore.h"
+#include "CELLThread.h"
 
-////任务类型-基类
-//class CellTask
-//{
-//public:
-//    CellTask() = default;
-//    virtual ~CellTask() = default;
-//    //执行任务
-//    virtual int doTask() = 0;
-//
-//private:
-//
-//};
 
 //执行任务的服务类型
 class CellTaskServer
@@ -41,17 +30,13 @@ public:
     void Start();
 
     void close() {
-        if (_isRun) {
-            printf("CellTaskServer<%d> close start\n", serverId);
-            _isRun = false;
-            _sem.wait();
-            printf("CellTaskServer<%d> close end\n", serverId);
-        }
-
+        printf("CellTaskServer<%d> close start\n", serverId);
+        _thread.Close();
+        printf("CellTaskServer<%d> close end\n", serverId);
     }
 private:
     //循环执行工作函数
-    void OnRun();
+    void OnRun(CELLThread* pThread);
 
 
 
@@ -63,9 +48,10 @@ private:
     //改变数据缓冲区时需要加锁
     std::mutex _mutex;
 
-    bool _isRun = false;
+    //bool _isRun = false;
+    //CELLSemaphore _sem;
 
-    CELLSemaphore _sem;
+    CELLThread _thread;
 
 };
 
@@ -75,13 +61,12 @@ void CellTaskServer::addTask(CellTask task) {
 }
 
 void CellTaskServer::Start() {
-    _isRun = true;
-    std::thread t(std::mem_fn(&CellTaskServer::OnRun), this);
-    t.detach();
+
+    _thread.Start(nullptr, [this](CELLThread* pThread){OnRun(pThread);}, nullptr);
 }
 
-void CellTaskServer::OnRun() {
-    while (_isRun) {
+void CellTaskServer::OnRun(CELLThread* pthread) {
+    while (pthread->isRun()) {
         //从缓冲区中取出数据
         if (!_tasksBuf.empty()) {
             std::lock_guard<std::mutex> lock(_mutex);
@@ -106,7 +91,6 @@ void CellTaskServer::OnRun() {
         }
     }
     printf("CellTaskServer<%d> OnRun exit\n", serverId);
-    _sem.wakeUp();
 
 }
 

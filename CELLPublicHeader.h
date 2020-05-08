@@ -19,6 +19,7 @@
 #endif
 #include <cstdio>
 
+#include <cstring>
 
 #include "DataStruct.h"
 #include "CELLTimestamp.h"

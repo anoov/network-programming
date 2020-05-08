@@ -10,6 +10,7 @@
 #include "INetEvent.h"
 #include "CELLClient.h"
 #include "CELLSemaphore.h"
+#include "CELLThread.h"
 
 
 //网络消息接收处理服务类
@@ -36,7 +37,7 @@ public:
 
     }
 
-    bool OnRun();
+    bool OnRun(CELLThread* pThread);
 
     bool IsRun();
 
@@ -118,13 +119,15 @@ private:
     //客户列表是否有变化
     bool _clients_change;
 
-    CELLSemaphore _sem;
+    //线程
+    CELLThread _thread;
+
 
 };
 
-bool CELLServer::OnRun() {
+bool CELLServer::OnRun(CELLThread* pThread) {
     _clients_change = true;
-    while (IsRun()) {
+    while (pThread->isRun()) {
         if (!_clientsBuff.empty()) {
             //从缓冲队列中取出客户数据
             std::lock_guard<std::mutex> lockGuard(_mutex);
@@ -171,8 +174,9 @@ bool CELLServer::OnRun() {
         int ret = select(_maxSock + 1, &fdRead, nullptr, nullptr, &t); //每个线程的任务只是查询消息，采用阻塞方式更好
 
         if (ret < 0) {
-            printf("select发生错误, 任务结束\n");
-            Close();
+            printf("CELLServer<%d>.OnRun.select发生错误, 任务结束\n", _id);
+            //Close();  //OnRun内部调用Close会调用信号量等待函数，而此时OnRun并一直阻塞不回退出，也就不回调用唤醒函数
+            pThread->Exit();
             return false;
         } else if (ret == 0) {
             //ret == 0说明没有可处理的数据，下面的代码跳过
@@ -202,7 +206,6 @@ bool CELLServer::OnRun() {
 
     }
     printf("CELLServer<%d> OnRun exit\n", _id);
-    _sem.wakeUp();
 
     return false ;
 }
@@ -213,20 +216,8 @@ bool CELLServer::IsRun() {
 
 void CELLServer::Close() {
     printf("CELLServer<%d> close start\n", _id);
-    if (_sock != INVALID_SOCKET) {
-        _sock = INVALID_SOCKET;
-
-        _taskServer.close();
-        ////在CELLClient中的析构函数中自动关闭
-        //for (auto  _client : _clients) {
-        //    close(_client->GetSock());
-        //    //delete _client;
-        //}
-        //close(_sock);
-        _clients.clear();
-
-        _sem.wait();
-    }
+    _taskServer.close();
+    _thread.Close();
     printf("CELLServer<%d> close end\n", _id);
 }
 
@@ -284,10 +275,10 @@ void CELLServer::AddClient(CELLClientPtr pClient) {
 }
 
 void CELLServer::Start() {
-    //_pThread = std::shared_ptr<std::thread>(new std::thread(std::mem_fn(&CELLServer::OnRun), this));
-    std::thread t(std::mem_fn(&CELLServer::OnRun), this);
-    t.detach();
     _taskServer.Start(); //启动消息发送线程
+    _thread.Start(nullptr,
+                  [this](CELLThread* pThread){OnRun(pThread);},
+                  nullptr);
 }
 
 #endif //EASYTCPSERVER_CELLSERVER_H
