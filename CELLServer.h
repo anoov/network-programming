@@ -9,21 +9,31 @@
 #include "CELLPublicHeader.h"
 #include "INetEvent.h"
 #include "CELLClient.h"
+#include "CELLSemaphore.h"
 
 
 //网络消息接收处理服务类
 class CELLServer
 {
 public:
-    explicit CELLServer(SOCKET sock = INVALID_SOCKET) {
+    explicit CELLServer(int id, SOCKET sock = INVALID_SOCKET) {
+        _id = id;
         _sock = sock;
-        _pThread = nullptr;
         _pNetEvent = nullptr;
+
+        _taskServer.serverId = id;
     }
     ~CELLServer() {
-        Close();
-        _sock = INVALID_SOCKET;
-        //delete _pThread;
+        printf("CELLServer<%d> ~CELLServer start\n", _id);
+        //if(SOCKET_ERROR != _sock) {
+
+            Close();
+            //_sock = INVALID_SOCKET;
+            //delete _pThread;
+        //}
+        printf("CELLServer<%d> ~CELLServer end\n", _id);
+
+
     }
 
     bool OnRun();
@@ -56,7 +66,6 @@ public:
         });
     }
 
-    time_t _oldTime = CELLTime::getNowInMilliSec();
     void CheckTime() {
         auto nowTime = CELLTime::getNowInMilliSec();
         auto dt = nowTime - _oldTime;
@@ -69,7 +78,7 @@ public:
                     _pNetEvent->OnLeave(*iter);
                 _clients_change = true;
                 //delete *iter;
-                close((*iter)->GetSock());
+                //close((*iter)->GetSock());
                 iter = _clients.erase(iter);
                 continue;
             }
@@ -89,22 +98,27 @@ private:
     std::vector<CELLClientPtr> _clientsBuff;
     std::mutex _mutex;
 
-    static const int RECV_BUFF_SIZE = 10240;
-    char _szRecv[RECV_BUFF_SIZE] = {};
-
-    std::shared_ptr<std::thread>  _pThread;
-
     INETEvent* _pNetEvent;
 
     //用于改进 2020 04 29 CELLServer::OnRun
     //备份客户socket fd_set
     fd_set _fdRead_back;
-    //客户列表是否有变化
-    bool _clients_change;
+
     SOCKET _maxSock;
 
     //任务服务类型，
     CellTaskServer _taskServer;
+
+    //旧时间戳
+    time_t _oldTime = CELLTime::getNowInMilliSec();
+
+    //自定义线程ID；
+    int _id = -1;
+
+    //客户列表是否有变化
+    bool _clients_change;
+
+    CELLSemaphore _sem;
 
 };
 
@@ -176,7 +190,7 @@ bool CELLServer::OnRun() {
                         if (_pNetEvent)
                             _pNetEvent->OnLeave(_clients[n]);
                         //delete _clients[n];
-                        close((*iter)->GetSock());
+                        //close((*iter)->GetSock());
                         _clients.erase(iter);
                     }
                 }
@@ -187,6 +201,9 @@ bool CELLServer::OnRun() {
 
 
     }
+    printf("CELLServer<%d> OnRun exit\n", _id);
+    _sem.wakeUp();
+
     return false ;
 }
 
@@ -195,15 +212,20 @@ bool CELLServer::IsRun() {
 }
 
 void CELLServer::Close() {
+    printf("CELLServer<%d> close start\n", _id);
     if (_sock != INVALID_SOCKET) {
-        for (auto  _client : _clients) {
-            close(_client->GetSock());
-            //delete _client;
-        }
-        close(_sock);
-        _sock = INVALID_SOCKET;
+        _taskServer.close();
+        ////在CELLClient中的析构函数中自动关闭
+        //for (auto  _client : _clients) {
+        //    close(_client->GetSock());
+        //    //delete _client;
+        //}
+        //close(_sock);
         _clients.clear();
+        _sock = INVALID_SOCKET;
+        _sem.wait();
     }
+    printf("CELLServer<%d> close end\n", _id);
 }
 
 int CELLServer::RecvData(CELLClientPtr clientSock) {
@@ -219,7 +241,7 @@ int CELLServer::RecvData(CELLClientPtr clientSock) {
 
     //取消第一缓冲区，即取消水舀子，留下水缸
     char* szRecv = clientSock->GetMsg() + clientSock->GetPos();
-    int nLen = (int)recv(clientSock->GetSock(), szRecv, RECV_BUFF_SIZE - clientSock->GetPos(), 0);
+    int nLen = (int)recv(clientSock->GetSock(), szRecv, clientSock->RECV_BUFF_SIZE - clientSock->GetPos(), 0);
     _pNetEvent->OnNetRecv(clientSock);
     if (nLen <= 0) {
         //printf("客户端<Socket = %d>退出, 任务结束\n", clientSock->GetSock());
@@ -260,9 +282,10 @@ void CELLServer::AddClient(CELLClientPtr pClient) {
 }
 
 void CELLServer::Start() {
-    _pThread = std::shared_ptr<std::thread>(new std::thread(std::mem_fn(&CELLServer::OnRun), this));
+    //_pThread = std::shared_ptr<std::thread>(new std::thread(std::mem_fn(&CELLServer::OnRun), this));
+    std::thread t(std::mem_fn(&CELLServer::OnRun), this);
+    t.detach();
     _taskServer.Start(); //启动消息发送线程
-    //_pThread->detach();
 }
 
 #endif //EASYTCPSERVER_CELLSERVER_H

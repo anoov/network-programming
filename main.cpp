@@ -91,7 +91,7 @@ public:
 int main() {
     MyServer server;
     server.InitSocket();
-//    server.Bind("10.211.55.4", 4567);
+    //server.Bind("10.211.55.4", 4567);
     server.Bind("127.0.0.1", 4567);
     server.Listen(50);
 
@@ -105,5 +105,14 @@ int main() {
         server.OnRun();
     }
     server.Close();
+    std::chrono::milliseconds t(5000);
+    std::this_thread::sleep_for(t);
+
+//    CELLServer task(1, 1);
+//    task.Start();
+//    std::chrono::milliseconds t(1000);
+//    std::this_thread::sleep_for(t);
+//    task.Close();
+
     return 0;
 }

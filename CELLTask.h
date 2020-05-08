@@ -9,6 +9,7 @@
 #include <mutex>
 #include <list>
 #include <functional>
+#include "CELLSemaphore.h"
 
 ////任务类型-基类
 //class CellTask
@@ -26,6 +27,10 @@
 //执行任务的服务类型
 class CellTaskServer
 {
+public:
+    //所属server的id
+    int serverId = -1;
+private:
     using CellTask = std::function<void()>;
 public:
     CellTaskServer() = default;
@@ -35,9 +40,20 @@ public:
     //启动服务
     void Start();
 
+    void close() {
+        if (_isRun) {
+            printf("CellTaskServer<%d> close start\n", serverId);
+            _isRun = false;
+            _sem.wait();
+            printf("CellTaskServer<%d> close end\n", serverId);
+        }
+
+    }
 private:
     //循环执行工作函数
     void OnRun();
+
+
 
 private:
     //真实任务数据
@@ -46,6 +62,11 @@ private:
     std::list<CellTask> _tasksBuf;
     //改变数据缓冲区时需要加锁
     std::mutex _mutex;
+
+    bool _isRun = false;
+
+    CELLSemaphore _sem;
+
 };
 
 void CellTaskServer::addTask(CellTask task) {
@@ -54,12 +75,13 @@ void CellTaskServer::addTask(CellTask task) {
 }
 
 void CellTaskServer::Start() {
+    _isRun = true;
     std::thread t(std::mem_fn(&CellTaskServer::OnRun), this);
     t.detach();
 }
 
 void CellTaskServer::OnRun() {
-    while (true) {
+    while (_isRun) {
         //从缓冲区中取出数据
         if (!_tasksBuf.empty()) {
             std::lock_guard<std::mutex> lock(_mutex);
@@ -83,6 +105,9 @@ void CellTaskServer::OnRun() {
             _tasks.clear();
         }
     }
+    printf("CellTaskServer<%d> OnRun exit\n", serverId);
+    _sem.wakeUp();
+
 }
 
 #endif //EASYTCPSERVER_CELLTASK_H

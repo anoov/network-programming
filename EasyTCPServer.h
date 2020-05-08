@@ -31,7 +31,9 @@ public:
         _recvCount = 0;
     }
     virtual ~EasyTCPServer() {
-        Close();
+        if (SOCKET_ERROR != _sock) {
+            Close();
+        }
     }
     //初始化socket
     int InitSocket();
@@ -122,10 +124,17 @@ int EasyTCPServer::Listen(int n) {
 }
 
 void EasyTCPServer::Close() {
+    printf("EasyTCPServer close start\n");
     if (_sock != INVALID_SOCKET) {
+        for (auto s : _cellServer) {
+            delete s;
+        }
+        _cellServer.clear();
         close(_sock);
-        //_sock = INVALID_SOCKET;
+        _sock = INVALID_SOCKET;
     }
+    printf("EasyTCPServer close end\n");
+
 }
 
 SOCKET EasyTCPServer::Accept() {
@@ -220,10 +229,9 @@ void EasyTCPServer::time4msg() {
 
 }
 
-
 void EasyTCPServer::Start(int threadCount) {
     for (int i = 0; i < threadCount; i++) {
-        auto ser = new CELLServer(_sock);
+        auto ser = new CELLServer(i+1, _sock);
         _cellServer.push_back(ser);
         //注册网络事件接收对象
         ser->SetNetEvent(this);

@@ -26,6 +26,20 @@ public:
         resetDTHeart();
         resetDTSend();
     }
+
+    ~CELLClient() {
+        printf("CELLClient<%d> ~CELLClient\n", _sockFd);
+
+        if (INVALID_SOCKET != _sockFd) {
+#ifdef win32
+            closesocket(_sockFd);
+#else
+            close(_sockFd);
+#endif
+            _sockFd = INVALID_SOCKET;
+        }
+    }
+
     SOCKET GetSock() {return _sockFd;}
     char *GetMsg() {return _szMsgBuf;}
     int GetPos()  {return _lastPos;}
@@ -105,7 +119,7 @@ public:
     bool checkSend(time_t dt) {
         _dtSend += dt;
         if (_dtSend >= CLIENT_SEND_BUFF_TIME) {
-            printf("checkSend s=%d, time=%ld\n", _sockFd, _dtSend);
+            //printf("checkSend s=%d, time=%ld\n", _sockFd, _dtSend);
             //立即发送缓冲区中的数据
             SendDataNow();
             //重置发送计时
@@ -116,17 +130,20 @@ public:
         }
     }
 
+public:
+    static const int RECV_BUFF_SIZE = 10240;
+    static const int SEND_BUFF_SIZE = 10240;
+
+
 private:
     SOCKET _sockFd;
     //以下解决粘包和拆分包需要的变量
     //接收缓冲区
-    static const int RECV_BUFF_SIZE = 10240;
     //第二缓冲区  消息缓冲区
     char _szMsgBuf[RECV_BUFF_SIZE] = {};
     int _lastPos;                        //指向缓冲区有数据的末尾位置
 
     //发送缓冲区
-    static const int SEND_BUFF_SIZE = 10240;
     char _szSendBuf[SEND_BUFF_SIZE] = {};
     int _lastSendPos;                        //指向缓冲区有数据的末尾位置
 
