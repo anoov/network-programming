@@ -214,6 +214,8 @@ bool CELLServer::IsRun() {
 void CELLServer::Close() {
     printf("CELLServer<%d> close start\n", _id);
     if (_sock != INVALID_SOCKET) {
+        _sock = INVALID_SOCKET;
+
         _taskServer.close();
         ////在CELLClient中的析构函数中自动关闭
         //for (auto  _client : _clients) {
@@ -222,7 +224,7 @@ void CELLServer::Close() {
         //}
         //close(_sock);
         _clients.clear();
-        _sock = INVALID_SOCKET;
+
         _sem.wait();
     }
     printf("CELLServer<%d> close end\n", _id);

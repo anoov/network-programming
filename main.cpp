@@ -105,8 +105,7 @@ int main() {
         server.OnRun();
     }
     server.Close();
-    std::chrono::milliseconds t(5000);
-    std::this_thread::sleep_for(t);
+
 
 //    CELLServer task(1, 1);
 //    task.Start();
