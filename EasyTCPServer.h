@@ -83,6 +83,12 @@ protected:
 };
 
 int EasyTCPServer::InitSocket() {
+#ifndef _win32
+    ///在Linux中，若客户端或者服务器端断开连接时会接收到一个信号，这个信号会触发进程终止
+    ///在收到该信号时无作为
+    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
+        return 1;
+#endif
     // 1 建立一个socket
     if (_sock != INVALID_SOCKET) {
         printf("<socket = %d>关闭之前的连接...\n", _sock);

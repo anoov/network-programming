@@ -18,7 +18,7 @@
     #define SOCKET_ERROR            (-1)
 #endif
 #include <cstdio>
-
+#include <csignal>
 #include <cstring>
 
 #include "DataStruct.h"
