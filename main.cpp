@@ -49,7 +49,10 @@ public:
                 //       clientSock, login->dataLength, login->userName, login->passWord);
                 //忽略判断用户名和密码
                 LoginResult ret;
-                clientSock->SendData(&ret);
+                if (SOCKET_ERROR ==  clientSock->SendData(&ret)) {
+                    //发送缓冲区满了，消息没有发出去
+                    printf("socket<%d> send full\n", clientSock->GetSock());
+                }
                 ////使用收发分离
                 //auto* ret = new LoginResult();
                 //pCellServer->addSendTask(clientSock, ret);

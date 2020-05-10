@@ -45,7 +45,7 @@ public:
 
     int RecvData(CELLClientPtr clientSock);
 
-    virtual void OnNetMsg(CELLClientPtr clientSock, DataHeader *header);
+    void OnNetMsg(CELLClientPtr clientSock, DataHeader *header);
 
     void AddClient(CELLClientPtr pClient);
 
@@ -67,6 +67,40 @@ public:
         });
     }
 
+    void OnClientLeave(int index) {
+        auto iter = _clients.begin() + index;//std::vector<SOCKET>::iterator
+        if (iter != _clients.end()) {
+            _clients_change = true;
+            if (_pNetEvent)
+                _pNetEvent->OnLeave(_clients[index]);
+            //delete _clients[n];
+            //close((*iter)->GetSock());
+            _clients.erase(iter);
+        }
+    }
+
+    void ReadData(fd_set& fdRead) {
+        for (int n = (int) _clients.size() - 1; n >= 0; n--) {
+            //如何客户socket数组中有读组操作，则说明有消息进来
+            if (FD_ISSET(_clients[n]->GetSock(), &fdRead)) {
+                if (-1 == RecvData(_clients[n])) {
+                    OnClientLeave(n);
+                }
+            }
+        }
+    }
+
+    void WriteData(fd_set& fdWrite) {
+        for (int n = (int) _clients.size() - 1; n >= 0; n--) {
+            //如何客户socket数组中有读组操作，则说明有消息进来
+            if (FD_ISSET(_clients[n]->GetSock(), &fdWrite)) {
+                if (-1 == _clients[n]->SendDataNow()) {     //直接将缓冲区的数据发出去
+                    OnClientLeave(n);
+                }
+            }
+        }
+    }
+
     void CheckTime() {
         auto nowTime = CELLTime::getNowInMilliSec();
         auto dt = nowTime - _oldTime;
@@ -83,8 +117,8 @@ public:
                 iter = _clients.erase(iter);
                 continue;
             }
-            //定时发送检测
-            (*iter)->checkSend(dt);
+//            //定时发送检测
+//            (*iter)->checkSend(dt);
             iter ++;
 
         }
@@ -153,54 +187,48 @@ bool CELLServer::OnRun(CELLThread* pThread) {
         //第三个参数：异常描述符集合
         //第四个参数：时间，在该时间内没有返回，则返回
         fd_set fdRead;
-        FD_ZERO(&fdRead);   //清空集合中的数据
+        fd_set fdWrite;
+        //fd_set fdExc;
         if (_clients_change) {
             _clients_change = false;
+            FD_ZERO(&fdRead);   //清空集合中的数据
             _maxSock = _clients[0]->GetSock();
             for (int i = (int) _clients.size() - 1; i >= 0; i--) {
-                FD_SET(_clients[i]->GetSock(), &fdRead);//有没有客户需要接收
+                FD_SET(_clients[i]->GetSock(), &fdRead);//将客户端集合放在读描述符集合中
                 _maxSock = std::max(_maxSock, _clients[i]->GetSock());
             }
             memcpy(&_fdRead_back, &fdRead, sizeof(_fdRead_back));
         } else {
             memcpy(&fdRead, &_fdRead_back, sizeof(_fdRead_back));
         }
+        //因为可写和异常集合和可读集合是同样的，在可读做计算后可直接拿来用
+        memcpy(&fdWrite, &_fdRead_back, sizeof(_fdRead_back));
+        //memcpy(&fdExc, &_fdRead_back, sizeof(_fdRead_back));
+
 
         timeval t = {0, 1};
         //若最后一个参数设置为null，则程序会阻塞到select这里，一直等到有数据可处理
         //select监视三个集合中的所有描述符，在这里是套接字
         //例如select的第二个参数读集合，
         //若集合中的某一个socket有读操作，则保持该操作位，否则该操作位清零
-        int ret = select(_maxSock + 1, &fdRead, nullptr, nullptr, &t); //每个线程的任务只是查询消息，采用阻塞方式更好
+        int ret = select(_maxSock + 1, &fdRead, &fdWrite, nullptr, &t); //每个线程的任务只是查询消息，采用阻塞方式更好
 
         if (ret < 0) {
-            printf("CELLServer<%d>.OnRun.select发生错误, 任务结束\n", _id);
+            printf("CELLServer<%d>.OnRun.select Error, exit\n", _id);
             //Close();  //OnRun内部调用Close会调用信号量等待函数，而此时OnRun并一直阻塞不回退出，也就不回调用唤醒函数
             pThread->Exit();
-            return false;
+            break;
         } else if (ret == 0) {
             //ret == 0说明没有可处理的数据，下面的代码跳过
             continue;
         }
 
         //接收数据
-        for (int n = (int) _clients.size() - 1; n >= 0; n--) {
-            //如何客户socket数组中有读组操作，则说明有消息进来
-            if (FD_ISSET(_clients[n]->GetSock(), &fdRead)) {
-                if (-1 == RecvData(_clients[n])) {
-                    auto iter = _clients.begin() + n;//std::vector<SOCKET>::iterator
-                    if (iter != _clients.end()) {
-                        _clients_change = true;
-                        if (_pNetEvent)
-                            _pNetEvent->OnLeave(_clients[n]);
-                        //delete _clients[n];
-                        //close((*iter)->GetSock());
-                        _clients.erase(iter);
-                    }
-                }
-            }
-        }
-
+        ReadData(fdRead);
+        //写数据
+        WriteData(fdWrite);
+        //通过写操作将异常表现出来
+        //WriteData(fdExc);
         CheckTime();
 
 

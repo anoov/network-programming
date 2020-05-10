@@ -51,46 +51,63 @@ public:
         //要发送的数据
         const char* pSendData = (const char *)header;
 
-        while (true) {
-            //如何要发送的数据长度远大于缓冲区，需要循环发送
-            if (_lastSendPos + nSendLen >= SEND_BUFF_SIZE) {
-                //计算可拷贝的数据长度
-                int nCopyLen = SEND_BUFF_SIZE - _lastSendPos;
-                //拷贝数据
-                memcpy(_szSendBuf + _lastSendPos, pSendData, nCopyLen);
-                //计算剩余数据位置
-                pSendData += nCopyLen;
-                //计算剩余数据长度
-                nSendLen -= nCopyLen;
-                //发送数据
-                ret = send(_sockFd, _szSendBuf, SEND_BUFF_SIZE, 0);
-                //数据尾部指针清零
-                _lastSendPos = 0;
-                //重置发送时间
-                resetDTSend();
-                //如何发生错误
-                if (SOCKET_ERROR == ret) {
-                    return ret;
-                }
-            } else {
-                //将要发送的数据拷贝到发送缓冲区尾部
-                memcpy(_szSendBuf + _lastSendPos, pSendData, nSendLen);
-                _lastSendPos += nSendLen;
-                break;
+        if (_lastSendPos + nSendLen <= SEND_BUFF_SIZE) {
+            //将要发送的数据拷贝到发送缓冲区尾部
+            memcpy(_szSendBuf + _lastSendPos, pSendData, nSendLen);
+            _lastSendPos += nSendLen;
+            if (_lastSendPos == SEND_BUFF_SIZE) {
+                _sendBuffFullCount ++;
             }
+            return nSendLen;
+        } else {
+            _sendBuffFullCount++;
         }
         return ret;
+
+//        while (true) {
+//            //如何要发送的数据长度远大于缓冲区，需要循环发送
+//            if (_lastSendPos + nSendLen >= SEND_BUFF_SIZE) {
+//                //计算可拷贝的数据长度
+//                int nCopyLen = SEND_BUFF_SIZE - _lastSendPos;
+//                //拷贝数据
+//                memcpy(_szSendBuf + _lastSendPos, pSendData, nCopyLen);
+//                //计算剩余数据位置
+//                pSendData += nCopyLen;
+//                //计算剩余数据长度
+//                nSendLen -= nCopyLen;
+//                //发送数据
+//                ret = send(_sockFd, _szSendBuf, SEND_BUFF_SIZE, 0);
+//                //数据尾部指针清零
+//                _lastSendPos = 0;
+//                //重置发送时间
+//                resetDTSend();
+//                //如何发生错误
+//                if (SOCKET_ERROR == ret) {
+//                    return ret;
+//                }
+//            }
+//            else {
+//                //将要发送的数据拷贝到发送缓冲区尾部
+//                memcpy(_szSendBuf + _lastSendPos, pSendData, nSendLen);
+//                _lastSendPos += nSendLen;
+//                break;
+//            }
+//        }
+//        return ret;
     }
 
     //立即发送数据
     int SendDataNow() {
-        int ret = SOCKET_ERROR;
+        int ret = 0;
         //确保缓冲区有数据
-        if (_lastSendPos > 0 && SOCKET_ERROR != _sockFd) {
+        if (_lastSendPos > 0 && INVALID_SOCKET != _sockFd) {
             //发送数据
             ret = send(_sockFd, _szSendBuf, _lastSendPos, 0);
             //数据尾部位置清零
             _lastSendPos = 0;
+            //对缓冲区满的计数进行清零
+            _sendBuffFullCount = 0;
+            //重置发送计时
             resetDTSend();
         }
         return ret;
@@ -131,8 +148,8 @@ public:
     }
 
 public:
-    static const int RECV_BUFF_SIZE = 10240;
-    static const int SEND_BUFF_SIZE = 10240;
+    static const int RECV_BUFF_SIZE = 1024;
+    static const int SEND_BUFF_SIZE = 102400;
 
 
 private:
@@ -152,6 +169,8 @@ private:
 
     //上次发送消息数据的时间
     time_t _dtSend;
+    //发送缓冲区写满的次数
+    int _sendBuffFullCount = 0;
 
 
 };
