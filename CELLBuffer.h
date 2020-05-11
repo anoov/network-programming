@@ -24,6 +24,20 @@ public:
     }
     //将数据添加到缓冲区
     bool Push(const char* pData, int nLen) {
+        //如果新来的数据在缓冲中放不开
+        if (_nLast + nLen > _nSize) {
+            //需要写入的数据大小大于可用空间
+            int n = _nLast + nLen - _nSize;
+            //小于8k，扩展buff的大小
+            if (n < 8192) {
+                n = 8192;
+
+            }
+            char* buff = new char[_nSize + n];
+            memcpy(buff, _pBuf, _nLast);
+            delete [] _pBuf;
+            _pBuf = buff;
+        }
         if (_nLast + nLen <= _nSize) {
             //将要发送的数据拷贝到发送缓冲区尾部
             memcpy(_pBuf + _nLast, pData, nLen);
