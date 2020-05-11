@@ -16,12 +16,8 @@
 class CELLClient
 {
 public:
-    explicit CELLClient(SOCKET s = INVALID_SOCKET){
+    explicit CELLClient(SOCKET s = INVALID_SOCKET):_recvBuff(RECV_BUFF_SIZE), _sendBuff(SEND_BUFF_SIZE){
         _sockFd = s;
-        memset(_szMsgBuf, 0, sizeof(_szMsgBuf));
-        memset(_szSendBuf, 0, sizeof(_szSendBuf));
-        _lastPos = 0;
-        _lastSendPos = 0;
 
         resetDTHeart();
         resetDTSend();
@@ -41,76 +37,41 @@ public:
     }
 
     SOCKET GetSock() {return _sockFd;}
-    char *GetMsg() {return _szMsgBuf;}
-    int GetPos()  {return _lastPos;}
-    void SetPos(int pos) {_lastPos = pos;}
+    //发送数据, 将数据写到缓冲区
     int SendData(DataHeader *header) {
-        int ret = SOCKET_ERROR;
         //要发送数据的长度
         int nSendLen = header->dataLength;
         //要发送的数据
-        const char* pSendData = (const char *)header;
+        const char *pSendData = (const char *) header;
 
-        if (_lastSendPos + nSendLen <= SEND_BUFF_SIZE) {
-            //将要发送的数据拷贝到发送缓冲区尾部
-            memcpy(_szSendBuf + _lastSendPos, pSendData, nSendLen);
-            _lastSendPos += nSendLen;
-            if (_lastSendPos == SEND_BUFF_SIZE) {
-                _sendBuffFullCount ++;
-            }
-            return nSendLen;
-        } else {
-            _sendBuffFullCount++;
+        if (_sendBuff.Push((const char *) pSendData, nSendLen)) {
+            return nSendLen;    //添加到缓冲区成功
         }
-        return ret;
-
-//        while (true) {
-//            //如何要发送的数据长度远大于缓冲区，需要循环发送
-//            if (_lastSendPos + nSendLen >= SEND_BUFF_SIZE) {
-//                //计算可拷贝的数据长度
-//                int nCopyLen = SEND_BUFF_SIZE - _lastSendPos;
-//                //拷贝数据
-//                memcpy(_szSendBuf + _lastSendPos, pSendData, nCopyLen);
-//                //计算剩余数据位置
-//                pSendData += nCopyLen;
-//                //计算剩余数据长度
-//                nSendLen -= nCopyLen;
-//                //发送数据
-//                ret = send(_sockFd, _szSendBuf, SEND_BUFF_SIZE, 0);
-//                //数据尾部指针清零
-//                _lastSendPos = 0;
-//                //重置发送时间
-//                resetDTSend();
-//                //如何发生错误
-//                if (SOCKET_ERROR == ret) {
-//                    return ret;
-//                }
-//            }
-//            else {
-//                //将要发送的数据拷贝到发送缓冲区尾部
-//                memcpy(_szSendBuf + _lastSendPos, pSendData, nSendLen);
-//                _lastSendPos += nSendLen;
-//                break;
-//            }
-//        }
-//        return ret;
+        return SOCKET_ERROR;
     }
-
     //立即发送数据
     int SendDataNow() {
-        int ret = 0;
-        //确保缓冲区有数据
-        if (_lastSendPos > 0 && INVALID_SOCKET != _sockFd) {
-            //发送数据
-            ret = send(_sockFd, _szSendBuf, _lastSendPos, 0);
-            //数据尾部位置清零
-            _lastSendPos = 0;
-            //对缓冲区满的计数进行清零
-            _sendBuffFullCount = 0;
-            //重置发送计时
-            resetDTSend();
-        }
+        int ret = _sendBuff.Write2Socket(_sockFd);
+        if (ret) resetDTSend();
         return ret;
+    }
+
+    //接收数据 成功返回收发字节数
+    int RecvData() {
+        return _recvBuff.ReadFromSocket(_sockFd);
+    }
+    //判断缓冲区中是否有完整的数据
+    bool hasMsg() {
+        return _recvBuff.hasMsg();
+    }
+    //取出缓冲区中头的完整数据
+    DataHeader* frontMsg() {
+        return (DataHeader*)_recvBuff.GetBuf();
+    }
+    //移除头完整数据
+    void popFrontMsg() {
+        if (hasMsg())
+            _recvBuff.Pop(frontMsg()->dataLength);
     }
 
     void resetDTHeart() {
@@ -127,11 +88,10 @@ public:
             return false;
         }
     }
-
+    //定时发送，重置发送时间
     void resetDTSend() {
         _dtSend = 0;
     }
-
     //定时发送消息检测
     bool checkSend(time_t dt) {
         _dtSend += dt;
@@ -148,8 +108,6 @@ public:
     }
 
 public:
-    static const int RECV_BUFF_SIZE = 1024;
-    static const int SEND_BUFF_SIZE = 102400;
 
 
 private:
@@ -157,12 +115,14 @@ private:
     //以下解决粘包和拆分包需要的变量
     //接收缓冲区
     //第二缓冲区  消息缓冲区
-    char _szMsgBuf[RECV_BUFF_SIZE] = {};
-    int _lastPos;                        //指向缓冲区有数据的末尾位置
+//    char _szMsgBuf[RECV_BUFF_SIZE] = {};
+//    int _lastPos;                        //指向缓冲区有数据的末尾位置
+
+    //接收缓冲区
+    CELLBuffer _recvBuff;
 
     //发送缓冲区
-    char _szSendBuf[SEND_BUFF_SIZE] = {};
-    int _lastSendPos;                        //指向缓冲区有数据的末尾位置
+    CELLBuffer _sendBuff;
 
     //心跳死亡计时
     time_t _dtHeart;

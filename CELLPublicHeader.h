@@ -21,9 +21,13 @@
 #include <csignal>
 #include <cstring>
 
+#define RECV_BUFF_SIZE  1024
+#define SEND_BUFF_SIZE  102400
+
 #include "DataStruct.h"
 #include "CELLTimestamp.h"
 #include "CELLTask.h"
+#include "CELLBuffer.h"
 
 
 #endif //EASYTCPSERVER_CELLPUBLICHEADER_H
