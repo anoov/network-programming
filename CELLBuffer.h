@@ -83,7 +83,7 @@ public:
             char* szRecv = _pBuf + _nLast;
             int nLen = (int)recv(sockFd, szRecv, _nSize - _nLast, 0);
             if (nLen <= 0) {
-                //printf("客户端<Socket = %d>退出, 任务结束\n", clientSock->GetSock());
+                //CELLLog::Info("客户端<Socket = %d>退出, 任务结束\n", clientSock->GetSock());
                 return nLen;
             }
             //消息缓冲区的数据尾部位置后移

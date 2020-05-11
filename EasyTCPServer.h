@@ -91,14 +91,14 @@ int EasyTCPServer::InitSocket() {
 #endif
     // 1 建立一个socket
     if (_sock != INVALID_SOCKET) {
-        printf("<socket = %d>关闭之前的连接...\n", _sock);
+        CELLLog::Info("<socket = %d>关闭之前的连接...\n", _sock);
         Close();
     }
     _sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (_sock == INVALID_SOCKET) {
-        printf("建立套接字失败...\n");
+        CELLLog::Info("建立套接字失败...\n");
     } else {
-        printf("建立套接字成功...\n");
+        CELLLog::Info("建立套接字成功...\n");
     }
     return _sock;
 }
@@ -113,9 +113,9 @@ int EasyTCPServer::Bind(const char *ip, unsigned short port) {
     _sin.sin_addr.s_addr = inet_addr(ip);
     int ret = bind(_sock, (sockaddr*)& _sin, sizeof(_sin));
     if (ret == SOCKET_ERROR) {
-        printf("绑定网络端口号<%d>失败...\n", port);
+        CELLLog::Info("绑定网络端口号<%d>失败...\n", port);
     } else {
-        printf("绑定网络端口号<%d>成功...\n", port);
+        CELLLog::Info("绑定网络端口号<%d>成功...\n", port);
     }
     return ret;
 }
@@ -123,15 +123,15 @@ int EasyTCPServer::Bind(const char *ip, unsigned short port) {
 int EasyTCPServer::Listen(int n) {
     int ret = listen(_sock, n);
     if (ret == SOCKET_ERROR){
-        printf("<Socket=%d>监听网络端口失败...\n", _sock);
+        CELLLog::Info("<Socket=%d>监听网络端口失败...\n", _sock);
     } else {
-        printf("<Socket=%d>监听网络端口成功...\n", _sock);
+        CELLLog::Info("<Socket=%d>监听网络端口成功...\n", _sock);
     }
     return ret;
 }
 
 void EasyTCPServer::Close() {
-    printf("EasyTCPServer close start\n");
+    CELLLog::Info("EasyTCPServer close start\n");
     _thread.Close();
     if (_sock != INVALID_SOCKET) {
         for (auto s : _cellServer) {
@@ -141,7 +141,7 @@ void EasyTCPServer::Close() {
         close(_sock);
         _sock = INVALID_SOCKET;
     }
-    printf("EasyTCPServer close end\n");
+    CELLLog::Info("EasyTCPServer close end\n");
 
 }
 
@@ -154,7 +154,7 @@ SOCKET EasyTCPServer::Accept() {
     clientSock = accept(_sock, (sockaddr *) &clientAddr, &nAddrLen);
 
     if (clientSock == INVALID_SOCKET) {
-        printf("<Socket=%d>接受客户连接失败...\n", _sock);
+        CELLLog::Info("<Socket=%d>接受客户连接失败...\n", _sock);
     } else {
         //将新加入来的客户加入到队列中
         auto newClient = std::make_shared<CELLClient>(clientSock);
@@ -203,7 +203,7 @@ bool EasyTCPServer::OnRun(CELLThread* pThread) {
         int ret = select(_sock + 1, &fdRead, nullptr, nullptr, &t);
 
         if (ret < 0) {
-            printf("EasyTCPServer<%d>.Accept select发生错误, 任务结束\n", _sock);
+            CELLLog::Info("EasyTCPServer<%d>.Accept select发生错误, 任务结束\n", _sock);
             //Close();
             pThread->Exit();
             break;
@@ -226,7 +226,7 @@ void EasyTCPServer::time4msg() {
     auto t1 = _tTime.getElapsedSecond();
     if (t1 >= 1.0) {
 
-        printf("thread<%lu>, time<%lf>, socket<%d>, clients<%d>, recvCount<%d>, msgCount<%d>\n",
+        CELLLog::Info("thread<%lu>, time<%lf>, socket<%d>, clients<%d>, recvCount<%d>, msgCount<%d>\n",
                 _cellServer.size(), t1, _sock, (int)_clientCount, (int)(_recvCount / t1), (int)(_msgCount/t1));
         _tTime.update();
         _msgCount = 0;
@@ -262,7 +262,7 @@ void EasyTCPServer::OnNetMsg(CELLServer* pCellServer, CELLClientPtr clientSock, 
 //        case CMD_LOGIN:
 //        {
 //            Login* login = (Login *)header;
-//            //printf("收到<Socket = %3d>请求：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
+//            //CELLLog::Info("收到<Socket = %3d>请求：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
 //            //       clientSock, login->dataLength, login->userName, login->passWord);
 //            //忽略判断用户名和密码
 //            LoginResult ret;
@@ -272,7 +272,7 @@ void EasyTCPServer::OnNetMsg(CELLServer* pCellServer, CELLClientPtr clientSock, 
 //        case CMD_LOGOUT:
 //        {
 //            LogOut* loginOut = (LogOut *)header;
-//            //printf("收到<Socket = %3d>请求：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
+//            //CELLLog::Info("收到<Socket = %3d>请求：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
 //            //       clientSock ,loginOut->dataLength, loginOut->userName);
 //            //忽略判断用户名和密码
 //            LoginOutResult ret;
@@ -281,7 +281,7 @@ void EasyTCPServer::OnNetMsg(CELLServer* pCellServer, CELLClientPtr clientSock, 
 //            break;
 //        default:
 //        {
-//            printf("收到<socket = %3d>未定义的消息，数据长度为: %d\n", clientSock->GetSock(), header->dataLength);
+//            CELLLog::Info("收到<socket = %3d>未定义的消息，数据长度为: %d\n", clientSock->GetSock(), header->dataLength);
 //            header->cmd = CMD_ERROR;
 //            header->dataLength = 0;
 //            clientSock->SendData(header);

@@ -65,14 +65,14 @@ void EasyTCPClient::Close() {
 void EasyTCPClient::InitSocket() {
     // 1 建立一个socket
     if (_sock != INVALID_SOCKET) {
-        printf("<socket = %d>关闭之前的连接...\n", _sock);
+        CELLLog::Info("<socket = %d>关闭之前的连接...\n", _sock);
         Close();
     }
     _sock = socket(AF_INET, SOCK_STREAM, 0);
     if (_sock == INVALID_SOCKET) {
-        printf("建立套接字失败...\n");
+        CELLLog::Info("建立套接字失败...\n");
     } else {
-        printf("建立套接字成功...\n");
+        CELLLog::Info("建立套接字成功...\n");
     }
 }
 
@@ -86,9 +86,9 @@ int EasyTCPClient::Connect(char *ip, unsigned short port) {
     _sin.sin_addr.s_addr = inet_addr(ip);
     int ret = connect(_sock, (sockaddr *)&_sin, sizeof(sockaddr));
     if (ret == SOCKET_ERROR) {
-        printf("连接失败...\n");
+        CELLLog::Info("连接失败...\n");
     }else {
-        printf("<socket = %d>连接成功...\n", _sock);
+        CELLLog::Info("<socket = %d>连接成功...\n", _sock);
     }
     return ret;
 }
@@ -101,14 +101,14 @@ bool EasyTCPClient::OnRun() {
         timeval t = {1, 0};
         int selectRet = select(_sock + 1, &fdReader, nullptr, nullptr, &t);
         if (selectRet < 0) {
-            printf("<Socket = %d>select发生错误, 任务结束1!\n", _sock);
+            CELLLog::Info("<Socket = %d>select发生错误, 任务结束1!\n", _sock);
             Close();
             return false;
         }
         if (FD_ISSET(_sock, &fdReader)) {
             FD_CLR(_sock, &fdReader);
             if (-1 == RecvData()) {
-                printf("<Socket = %d>select发生错误, 任务结束2!\n", _sock);
+                CELLLog::Info("<Socket = %d>select发生错误, 任务结束2!\n", _sock);
                 Close();
                 return false;
             }
@@ -125,7 +125,7 @@ int EasyTCPClient::RecvData() {
     //使用缓冲区来接受数据
     int nLen = recv(_sock, _szRecv, RECV_BUFF_SIZE, 0);
     if (nLen <= 0) {
-        printf("<socket = %d>与服务器断开连接, 任务结束\n", _sock);
+        CELLLog::Info("<socket = %d>与服务器断开连接, 任务结束\n", _sock);
         return -1;
     }
     //将收取到的数据拷贝到消息缓冲区
@@ -160,27 +160,27 @@ void EasyTCPClient::OnNetMsg(DataHeader *data) {
         case CMD_LOGIN_RESULT:
         {
             LoginResult* login = (LoginResult *)data;
-            printf("<Socket = %d>收到服务器消息：CMD_LOGIN_RESULT, 数据长度: %d，结果: %d\n",
+            CELLLog::Info("<Socket = %d>收到服务器消息：CMD_LOGIN_RESULT, 数据长度: %d，结果: %d\n",
                    _sock, login->dataLength, login->result);
         }
             break;
         case CMD_LOGOUT_RESULT:
         {
             LoginOutResult* loginOut = (LoginOutResult *)data;
-            printf("<Socket = %d>收到服务器消息：CMD_LOGOUT_RESULT, 数据长度: %d\n",
+            CELLLog::Info("<Socket = %d>收到服务器消息：CMD_LOGOUT_RESULT, 数据长度: %d\n",
                    _sock ,loginOut->dataLength);
         }
             break;
         case CMD_NEW_USER_JOIN:
         {
             NewUserJoin* newJoin = (NewUserJoin *)data;
-            printf("<Socket = %d>收到服务器消息：NEW_USER_JOIN, 数据长度: %d\n",
+            CELLLog::Info("<Socket = %d>收到服务器消息：NEW_USER_JOIN, 数据长度: %d\n",
                    _sock ,newJoin->dataLength);
         }
             break;
         default:
         {
-            printf("<Socket = %d>收到未定义消息：NEW_ERROR, 数据长度: %d\n",
+            CELLLog::Info("<Socket = %d>收到未定义消息：NEW_ERROR, 数据长度: %d\n",
                    _sock ,data->dataLength);
         }
             break;

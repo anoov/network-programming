@@ -28,6 +28,7 @@
 #include "CELLTimestamp.h"
 #include "CELLTask.h"
 #include "CELLBuffer.h"
+#include "CELLLog.h"
 
 
 #endif //EASYTCPSERVER_CELLPUBLICHEADER_H

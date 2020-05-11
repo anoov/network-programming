@@ -24,7 +24,7 @@ public:
     }
 
     ~CELLClient() {
-        printf("CELLClient<%d> ~CELLClient\n", _sockFd);
+        CELLLog::Info("CELLClient<%d> ~CELLClient\n", _sockFd);
 
         if (INVALID_SOCKET != _sockFd) {
 #ifdef win32
@@ -82,7 +82,7 @@ public:
     bool checkHeart(time_t dt) {
         _dtHeart += dt;
         if (_dtHeart >= CLIENT_HEART_DEAD_TIME) {
-            printf("checkHeart dead=%d, time=%ld\n", _sockFd, _dtHeart);
+            CELLLog::Info("checkHeart dead=%d, time=%ld\n", _sockFd, _dtHeart);
             return true;
         } else {
             return false;
@@ -96,7 +96,7 @@ public:
     bool checkSend(time_t dt) {
         _dtSend += dt;
         if (_dtSend >= CLIENT_SEND_BUFF_TIME) {
-            //printf("checkSend s=%d, time=%ld\n", _sockFd, _dtSend);
+            //CELLLog::Info("checkSend s=%d, time=%ld\n", _sockFd, _dtSend);
             //立即发送缓冲区中的数据
             SendDataNow();
             //重置发送计时

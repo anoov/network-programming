@@ -6,16 +6,16 @@ void cmdThread() {
     while (true) {
         // 3 输入请求命令
         char sendBuf[256] = {};
-        //printf("请输入命令：");
+        //CELLLog::Info("请输入命令：");
         scanf("%s", sendBuf);
 
         // 4 处理请求
         if (0 == strcmp(sendBuf, "exit")) {
             g_bRun = false;
-            printf("退出cmdThread线程！\n");
+            CELLLog::Info("退出cmdThread线程！\n");
             break;
         } else {
-            printf("收到不支持的命令，请重新输入！\n");
+            CELLLog::Info("收到不支持的命令，请重新输入！\n");
         }
     }
 }
@@ -45,13 +45,14 @@ public:
                 //收到登录消息也心跳了一次
                 clientSock->resetDTHeart();
                 Login* login = (Login *)header;
-                //printf("收到<Socket = %3d>请求：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
+                //CELLLog::Info("收到<Socket = %3d>请求：CMD_LOGIN, 数据长度: %d，用户名称: %s, 用户密码: %s\n",
                 //       clientSock, login->dataLength, login->userName, login->passWord);
                 //忽略判断用户名和密码
                 LoginResult ret;
                 if (SOCKET_ERROR ==  clientSock->SendData(&ret)) {
                     //发送缓冲区满了，消息没有发出去
-                    printf("socket<%d> send full\n", clientSock->GetSock());
+                    CELLLog::Info("socket<%d> send full\n", clientSock->GetSock());
+                    CELLLog::Info("socket<%d> send full\n", clientSock->GetSock());
                 }
                 ////使用收发分离
                 //auto* ret = new LoginResult();
@@ -61,7 +62,7 @@ public:
             case CMD_LOGOUT:
             {
                 LogOut* loginOut = (LogOut *)header;
-                //printf("收到<Socket = %3d>请求：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
+                //CELLLog::Info("收到<Socket = %3d>请求：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
                 //       clientSock ,loginOut->dataLength, loginOut->userName);
                 //忽略判断用户名和密码
                 auto* ret = new LoginOutResult();
@@ -80,7 +81,7 @@ public:
                 break;
             default:
             {
-                printf("收到<socket = %3d>未定义的消息，数据长度为: %d\n", clientSock->GetSock(), header->dataLength);
+                CELLLog::Info("收到<socket = %3d>未定义的消息，数据长度为: %d\n", clientSock->GetSock(), header->dataLength);
                 header->cmd = CMD_ERROR;
                 header->dataLength = 0;
                 //clientSock->SendData(header);
@@ -92,6 +93,9 @@ public:
 };
 
 int main() {
+
+    CELLLog::Instance().SetLogPath("serverLog.txt", "w");
+
     MyServer server;
     server.InitSocket();
     //server.Bind("10.211.55.4", 4567);
@@ -106,16 +110,16 @@ int main() {
     while (true) {
         // 3 输入请求命令
         char sendBuf[256] = {};
-        //printf("请输入命令：");
+        //CELLLog::Info("请输入命令：");
         scanf("%s", sendBuf);
 
         // 4 处理请求
         if (0 == strcmp(sendBuf, "exit")) {
             server.Close();
-            printf("退出cmdThread线程！\n");
+            CELLLog::Info("退出cmdThread线程！\n");
             break;
         } else {
-            printf("收到不支持的命令，请重新输入！\n");
+            CELLLog::Info("收到不支持的命令，请重新输入！\n");
         }
     }
 

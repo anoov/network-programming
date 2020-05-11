@@ -25,14 +25,14 @@ public:
         _taskServer.serverId = id;
     }
     ~CELLServer() {
-        printf("CELLServer<%d> ~CELLServer start\n", _id);
+        CELLLog::Info("CELLServer<%d> ~CELLServer start\n", _id);
         //if(SOCKET_ERROR != _sock) {
 
             Close();
             //_sock = INVALID_SOCKET;
             //delete _pThread;
         //}
-        printf("CELLServer<%d> ~CELLServer end\n", _id);
+        CELLLog::Info("CELLServer<%d> ~CELLServer end\n", _id);
 
 
     }
@@ -214,7 +214,7 @@ bool CELLServer::OnRun(CELLThread* pThread) {
         int ret = select(_maxSock + 1, &fdRead, &fdWrite, nullptr, &t); //每个线程的任务只是查询消息，采用阻塞方式更好
 
         if (ret < 0) {
-            printf("CELLServer<%d>.OnRun.select Error, exit\n", _id);
+            CELLLog::Info("CELLServer<%d>.OnRun.select Error, exit\n", _id);
             //Close();  //OnRun内部调用Close会调用信号量等待函数，而此时OnRun并一直阻塞不回退出，也就不回调用唤醒函数
             pThread->Exit();
             break;
@@ -233,7 +233,7 @@ bool CELLServer::OnRun(CELLThread* pThread) {
 
 
     }
-    printf("CELLServer<%d> OnRun exit\n", _id);
+    CELLLog::Info("CELLServer<%d> OnRun exit\n", _id);
 
     return false ;
 }
@@ -243,10 +243,10 @@ bool CELLServer::IsRun() {
 }
 
 void CELLServer::Close() {
-    printf("CELLServer<%d> close start\n", _id);
+    CELLLog::Info("CELLServer<%d> close start\n", _id);
     _taskServer.close();
     _thread.Close();
-    printf("CELLServer<%d> close end\n", _id);
+    CELLLog::Info("CELLServer<%d> close end\n", _id);
 }
 
 int CELLServer::RecvData(CELLClientPtr clientSock) {

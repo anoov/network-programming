@@ -11,6 +11,7 @@
 #include <functional>
 #include "CELLSemaphore.h"
 #include "CELLThread.h"
+//#include "CELLLog.h"
 
 
 //执行任务的服务类型
@@ -30,8 +31,10 @@ public:
     void Start();
 
     void close() {
+        //CELLLog::Info("CellTaskServer<%d> close start\n", serverId);
         printf("CellTaskServer<%d> close start\n", serverId);
         _thread.Close();
+        //CELLLog::Info("CellTaskServer<%d> close end\n", serverId);
         printf("CellTaskServer<%d> close end\n", serverId);
     }
 private:
@@ -90,6 +93,11 @@ void CellTaskServer::OnRun(CELLThread* pthread) {
             _tasks.clear();
         }
     }
+    //_taskBuf缓冲队列中可能还存在没有执行的任务
+    for (auto& pTask : _tasksBuf) {
+        pTask();
+    }
+    //CELLLog::Info("CellTaskServer<%d> OnRun exit\n", serverId);
     printf("CellTaskServer<%d> OnRun exit\n", serverId);
 
 }
