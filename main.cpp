@@ -1,6 +1,7 @@
 #include <iostream>
 #include "EasyTCPServer.h"
 #include <thread>
+#include "CELLNetWork.h"
 bool g_bRun = true;
 void cmdThread() {
     while (true) {
