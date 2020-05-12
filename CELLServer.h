@@ -180,6 +180,9 @@ bool CELLServer::OnRun(CELLThread* pThread) {
 
             continue;
         }
+
+        CheckTime();
+
         //伯克利 socket
         //第一个参数：集合中所有描述符的范围而不是数量，集合中最大值加一
         //第二个参数：读描述符集合，告诉内核需要查询的需要读的套接字的集合
@@ -201,24 +204,37 @@ bool CELLServer::OnRun(CELLThread* pThread) {
         } else {
             memcpy(&fdRead, &_fdRead_back, sizeof(_fdRead_back));
         }
+        bool bNeedWrite = false;    //记录本次循环  是否有客户socket可写 若没有则select中的写描述符集合传空
+        FD_ZERO(&fdWrite);
+        //检查客户socket，可写才加入写描述符集合
+        for (auto elem : _clients) {
+            if (elem->needWrite()) {
+                bNeedWrite = true;
+                FD_SET(elem->GetSock(), &fdWrite);
+            }
+        }
         //因为可写和异常集合和可读集合是同样的，在可读做计算后可直接拿来用
-        memcpy(&fdWrite, &_fdRead_back, sizeof(_fdRead_back));
+        //memcpy(&fdWrite, &_fdRead_back, sizeof(_fdRead_back));
         //memcpy(&fdExc, &_fdRead_back, sizeof(_fdRead_back));
-
 
         timeval t = {0, 1};
         //若最后一个参数设置为null，则程序会阻塞到select这里，一直等到有数据可处理
         //select监视三个集合中的所有描述符，在这里是套接字
         //例如select的第二个参数读集合，
         //若集合中的某一个socket有读操作，则保持该操作位，否则该操作位清零
-        int ret = select(_maxSock + 1, &fdRead, &fdWrite, nullptr, &t); //每个线程的任务只是查询消息，采用阻塞方式更好
-
+        int ret = 0;
+        if (bNeedWrite) {
+            ret = select(_maxSock + 1, &fdRead, &fdWrite, nullptr, &t); //每个线程的任务只是查询消息，采用阻塞方式更好
+        } else {
+            ret = select(_maxSock + 1, &fdRead, nullptr, nullptr, &t); //每个线程的任务只是查询消息，采用阻塞方式更好
+        }
         if (ret < 0) {
             CELLLog::Info("CELLServer<%d>.OnRun.select Error, exit\n", _id);
             //Close();  //OnRun内部调用Close会调用信号量等待函数，而此时OnRun并一直阻塞不回退出，也就不回调用唤醒函数
             pThread->Exit();
             break;
-        } else if (ret == 0) {
+        }
+        else if (ret == 0) {
             //ret == 0说明没有可处理的数据，下面的代码跳过
             continue;
         }
@@ -229,7 +245,6 @@ bool CELLServer::OnRun(CELLThread* pThread) {
         WriteData(fdWrite);
         //通过写操作将异常表现出来
         //WriteData(fdExc);
-        CheckTime();
 
 
     }

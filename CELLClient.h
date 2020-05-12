@@ -64,6 +64,11 @@ public:
     bool hasMsg() {
         return _recvBuff.hasMsg();
     }
+
+    bool needWrite() {
+        return _sendBuff.needWrite();
+    }
+
     //取出缓冲区中头的完整数据
     DataHeader* frontMsg() {
         return (DataHeader*)_recvBuff.GetBuf();

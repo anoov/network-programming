@@ -104,6 +104,10 @@ public:
         }
         return false;
     }
+    //若写缓冲区中有数据，则说明可写
+    bool needWrite() {
+        return _nLast > 0;
+    }
 private:
     //缓冲区
     char* _pBuf = nullptr;
