@@ -37,15 +37,25 @@ public:
     }
 
     SOCKET GetSock() {return _sockFd;}
+
     //发送数据, 将数据写到缓冲区
     int SendData(DataHeader *header) {
-        //要发送数据的长度
-        int nSendLen = header->dataLength;
-        //要发送的数据
-        const char *pSendData = (const char *) header;
+        return SendData((const char*)header, header->dataLength);
 
-        if (_sendBuff.Push((const char *) pSendData, nSendLen)) {
-            return nSendLen;    //添加到缓冲区成功
+//        //要发送数据的长度
+//        int nSendLen = header->dataLength;
+//        //要发送的数据
+//        const char *pSendData = (const char *) header;
+//
+//        if (_sendBuff.Push((const char *) pSendData, nSendLen)) {
+//            return nSendLen;    //添加到缓冲区成功
+//        }
+//        return SOCKET_ERROR;
+    }
+    int SendData(const char* header, int len) {
+
+        if (_sendBuff.Push(header, len)) {
+            return len;    //添加到缓冲区成功
         }
         return SOCKET_ERROR;
     }

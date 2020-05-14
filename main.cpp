@@ -1,7 +1,8 @@
-#include <iostream>
 #include "EasyTCPServer.h"
-#include <thread>
+#include <string>
+#include <vector>
 #include "CELLNetWork.h"
+#include "CELLMsgStream.h"
 bool g_bRun = true;
 void cmdThread() {
     while (true) {
@@ -53,7 +54,6 @@ public:
                 if (SOCKET_ERROR ==  clientSock->SendData(&ret)) {
                     //发送缓冲区满了，消息没有发出去
                     CELLLog::Info("socket<%d> send full\n", clientSock->GetSock());
-                    CELLLog::Info("socket<%d> send full\n", clientSock->GetSock());
                 }
                 ////使用收发分离
                 //auto* ret = new LoginResult();
@@ -62,13 +62,47 @@ public:
                 break;
             case CMD_LOGOUT:
             {
-                LogOut* loginOut = (LogOut *)header;
-                //CELLLog::Info("收到<Socket = %3d>请求：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
-                //       clientSock ,loginOut->dataLength, loginOut->userName);
-                //忽略判断用户名和密码
-                auto* ret = new LoginOutResult();
-                //clientSock->SendData(&ret);
-                pCellServer->addSendTask(clientSock, ret);
+                //测试流结构
+                CELLRecvStream s(header);
+                auto len = s.getNetLen();
+                auto cmd = s.getNetCmd();
+                auto int8 = s.ReadInt8();
+                auto int16 = s.ReadInt16();
+                auto int32 = s.ReadInt32();
+                auto f = s.ReadFloat();
+                auto d = s.ReadDouble();
+
+                uint32_t nChar = 0;
+                s.Read<uint32_t>(nChar, false);
+                std::string ret_char(nChar, ' ');
+                auto n_char = s.ReadArray(&ret_char[0], nChar);
+
+                uint32_t nInt = 0;
+                s.Read<uint32_t>(nInt, false);
+                std::vector<int> ret_int(nInt);
+                auto n_int = s.ReadArray(&ret_int[0], nInt);
+
+                CELLSendStream ret;
+                ret.setNetCmd(CMD_LOGOUT_RESULT);
+                ret.WriteInt8(5);
+                ret.WriteInt16(5);
+                ret.WriteInt32(5);
+                ret.WriteFloat(5.0);
+                ret.WriteDouble(5.0);
+                char a[]  = "server";
+                ret.WriteArray(a, strlen(a));
+                int b[] = {1, 2, 3, 4, 5};
+                ret.WriteArray(b, 5);
+                ret.finish();
+
+                clientSock->SendData(ret.data(), ret.length());
+//                LogOut* loginOut = (LogOut *)header;
+//                //CELLLog::Info("收到<Socket = %3d>请求：CMD_LOGOUT, 数据长度: %d，用户名称: %s\n",
+//                //       clientSock ,loginOut->dataLength, loginOut->userName);
+//                //忽略判断用户名和密码
+//                auto* ret = new LoginOutResult();
+//                //clientSock->SendData(&ret);
+//                pCellServer->addSendTask(clientSock, ret);
             }
                 break;
 

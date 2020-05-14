@@ -18,8 +18,8 @@ enum CMD
 
 struct DataHeader
 {
-    short dataLength;  //数据长度
-    short cmd;         //命令
+    uint16_t dataLength;  //数据长度
+    uint16_t cmd;         //命令
 };
 
 struct Login: public DataHeader
